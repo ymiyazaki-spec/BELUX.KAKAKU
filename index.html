@@ -91,7 +91,7 @@
           <input type="time" id="publish-time-input" value="15:00" style="font-size:14px; font-weight:bold; width:120px; padding:4px;">
           <button class="btn btn-s btn-sm" onclick="savePublishTime()">時刻を変更保存</button>
         </div>
-        <div style="font-size:10px; color:#666; margin-top:4px;">※ 設定した時刻になると下書きが一括でバイヤーへ届きます</div>
+        <div style="font-size:10px; color:#666; margin-top:4px;">※ 設定した時刻になると下書きが一括でバイヤーへ届き、LINEで通知されます</div>
       </div>
 
       <div class="card">
@@ -172,8 +172,11 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4NTE5MzAwOSwiZXhwIjoyMTAwNzY5MDA5fQ.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     
+    // LINE チャネルアクセストークン
+    const LINE_CHANNEL_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
+
     let _supabase = null;
     try {
       _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -202,6 +205,28 @@
         }
       } catch(e){}
       showLoginScreen();
+    }
+
+    // LINE一斉送信関数（三澤商事に修正）
+    async function sendLineNotification(count, staffName) {
+      if (!LINE_CHANNEL_TOKEN) return;
+      
+      const messageText = `【価格提案システム】\n三澤商事（${staffName || '担当者'}）より、本日分の提案が ${count} 件バイヤー画面に届きました！\n確認をお願いいたします。`;
+
+      try {
+        await fetch('https://api.line.me/v2/bot/message/broadcast', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${LINE_CHANNEL_TOKEN}`
+          },
+          body: JSON.stringify({
+            messages: [{ type: 'text', text: messageText }]
+          })
+        });
+      } catch(e) {
+        console.error('LINE送信エラー:', e);
+      }
     }
 
     function savePublishTime() {
@@ -261,7 +286,7 @@
         displayName = '事務担当';
       } else if (email.startsWith('misawa')) {
         role = 'supplier';
-        displayName = '三沢商事';
+        displayName = '三澤商事';
       } else {
         role = 'admin';
         displayName = '管理者';
@@ -354,7 +379,8 @@
       if (!rawStaffName) return alert('営業担当者名を入力してください');
       if (!name || price <= 0) return alert('商品名と単価を入力してください');
 
-      const fullStaffName = rawStaffName.includes('三沢') ? rawStaffName : `三沢（${rawStaffName}）`;
+      // 三澤商事表記へ統一
+      const fullStaffName = rawStaffName.includes('三澤') ? rawStaffName : `三澤（${rawStaffName}）`;
       localStorage.setItem('last_staff_name', rawStaffName);
 
       const payload = {
@@ -389,6 +415,7 @@
       if (!error) await fetchProposals();
     }
 
+    // 自動タイマー送信（時刻になるとLINE通知）
     async function checkAutoPublishTimer() {
       const setTime = localStorage.getItem('custom_publish_time') || '15:00';
       const [targetH, targetM] = setTime.split(':').map(Number);
@@ -397,20 +424,27 @@
       if (now.getHours() === targetH && now.getMinutes() === targetM) {
         const drafts = proposals.filter(p => p.status === 'draft');
         if (drafts.length > 0) {
+          const staffName = drafts[0].user_name || '';
           await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
           await fetchProposals();
+          // LINE通知送信
+          await sendLineNotification(drafts.length, staffName);
         }
       }
     }
 
+    // 手動一括送信（送信と同時にLINE通知）
     async function publishNowManual() {
       const drafts = proposals.filter(p => p.status === 'draft');
       if (!drafts.length) return alert('下書きリストに品目がありません');
 
       if (confirm(`下書きにある ${drafts.length} 件の提案を今すぐバイヤーへ送信しますか？`)) {
+        const staffName = drafts[0].user_name || '';
         await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
         await fetchProposals();
-        alert('バイヤーへ送信完了しました！');
+        // LINE通知送信
+        await sendLineNotification(drafts.length, staffName);
+        alert('バイヤーへ送信＆LINE通知が完了しました！');
       }
     }
 
@@ -448,7 +482,6 @@
       await fetchProposals();
     }
 
-    // ★修正箇所：判定済みデータ（approved と rejected の両方）をすべてアーカイブ対象にする
     async function archiveTodayData() {
       if (confirm('処理済みの提案データを画面から非表示（クリア）にしますか？\n（過去データはデータベースの記録として保持されます）')) {
         await _supabase.from('proposals').update({ is_archived: true }).in('status', ['approved', 'rejected']);
@@ -521,7 +554,7 @@
     function renderClk() {
       const el = document.getElementById('clk-list');
       const oks = proposals.filter(p => p.status === 'approved' && !p.is_archived);
-      if (!oks.length) return el.innerHTML = '<tr><td colspan="6" style="text-align:center;">確定データはありません</td></tr>';
+      if (!oks.length) return el.innerHTML = '<tr><td colspan="6" style="text-align:center;">確定データはありませんでした</td></tr>';
 
       el.innerHTML = '';
       oks.forEach(p => {
