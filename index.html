@@ -172,7 +172,6 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    // 修正版キー（最新発行キー）
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     
     let _supabase = null;
@@ -449,9 +448,10 @@
       await fetchProposals();
     }
 
+    // ★修正箇所：判定済みデータ（approved と rejected の両方）をすべてアーカイブ対象にする
     async function archiveTodayData() {
       if (confirm('処理済みの提案データを画面から非表示（クリア）にしますか？\n（過去データはデータベースの記録として保持されます）')) {
-        await _supabase.from('proposals').update({ is_archived: true }).neq('status', 'draft');
+        await _supabase.from('proposals').update({ is_archived: true }).in('status', ['approved', 'rejected']);
         await fetchProposals();
         alert('全画面の過去提案をクリアしました！');
       }
