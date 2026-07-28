@@ -58,7 +58,7 @@
   <div id="login-screen" class="login-container">
     <div class="login-title">🔒 システムログイン</div>
     <div id="login-error" style="color:var(--ng); font-size:11px; margin-bottom:8px; text-align:center; display:none;"></div>
-    <label>ユーザーID（例: belx , misawa , clerk）</label>
+    <label>ユーザーID（例: belx , misawa , misawa2 , clerk）</label>
     <input type="text" id="login-id" placeholder="例: belx">
     <label>パスワード</label>
     <input type="password" id="login-pw" placeholder="••••••••">
@@ -151,7 +151,7 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4NTE5MzAwOSwiZXhwIjoyMTAwNzY5MDA5fQ.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentUser = null;
@@ -216,15 +216,16 @@
       let role = 'supplier';
       let displayName = '担当者';
 
+      // 判定ロジックの修正（misawa2 や clerk を事務員として判定）
       if (email.startsWith('belx')) {
         role = 'buyer';
         displayName = 'ベルクス様 (バイヤー)';
+      } else if (email.startsWith('clerk') || email.startsWith('misawa2')) {
+        role = 'clerk';
+        displayName = '事務担当';
       } else if (email.startsWith('misawa')) {
         role = 'supplier';
         displayName = '三沢商事';
-      } else if (email.startsWith('clerk')) {
-        role = 'clerk';
-        displayName = '事務担当';
       } else {
         role = 'admin';
         displayName = '管理者';
@@ -234,7 +235,6 @@
 
       document.getElementById('user-display-name').innerText = currentProfile.display_name;
       
-      // 前回の担当者名が保存されていればそれを初期表示
       const savedStaffName = localStorage.getItem('last_staff_name') || '';
       document.getElementById('s-user-name').value = savedStaffName;
 
@@ -326,7 +326,6 @@
       const rawStaffName = document.getElementById('s-user-name').value.trim();
       const fullStaffName = rawStaffName.includes('三沢') ? rawStaffName : `三沢（${rawStaffName}）`;
 
-      // 担当者名をブラウザに保存（次回補完用）
       localStorage.setItem('last_staff_name', rawStaffName);
 
       const payload = {
