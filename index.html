@@ -16,11 +16,13 @@
     label { display: block; font-size: 11px; font-weight: bold; color: #666; margin-top: 6px; }
     input, select { width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; margin-top: 2px; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .btn { width: 100%; padding: 8px; border: none; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; margin-top: 8px; }
+    .btn { width: 100%; padding: 8px; border: none; border-radius: 4px; font-weight: bold; font-size: 12px; cursor: pointer; margin-top: 8px; box-sizing: border-box; }
     .btn-s { background: var(--s); color: #fff; }
     .btn-ok { background: var(--ok); color: #fff; }
     .btn-ng { background: var(--ng); color: #fff; }
-    .item-card { border: 1px solid #eee; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff; }
+    .btn-sub { background: #7f8c8d; color: #fff; }
+    .btn-sm { width: auto; padding: 3px 8px; font-size: 11px; margin-top: 0; }
+    .item-card { border: 1px solid #eee; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff; position: relative; }
     .badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 10px; color: #fff; font-weight: bold; }
     .bg-ok { background: var(--ok); }
     .bg-ng { background: var(--ng); }
@@ -35,6 +37,11 @@
     .done { background: #e8f8f5; color: #888; text-decoration: line-through; }
     .view { display: none; }
     .view.active { display: block; }
+    
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
+    .modal-overlay.active { display: flex; }
+    .modal-box { background: #fff; border-radius: 8px; padding: 16px; width: 90%; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .confirm-row { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 6px 0; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -51,29 +58,41 @@
   <div id="v-sup" class="view active">
     <div class="card">
       <div class="card-title">
-        <span>新規提案</span>
-        <select id="s-user" style="width:auto;" onchange="renderSup()">
-          <option value="Aさん">担当: Aさん</option>
-          <option value="Bさん">担当: Bさん</option>
-          <option value="Cさん">担当: Cさん</option>
-        </select>
+        <span id="form-title">新規提案入力</span>
+        <div>
+          <select id="s-user" style="width:auto; font-size:11px;" onchange="renderSup()"></select>
+          <button class="btn btn-sub btn-sm" onclick="openUserManageModal()">⚙️ 管理</button>
+        </div>
       </div>
+      <input type="hidden" id="editing-id" value="">
       <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
       <div class="grid">
-        <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="青森/28玉"></div>
-        <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="3500"></div>
+        <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
+        <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
       </div>
       <label>限定数量</label><input type="text" id="p-qty" placeholder="例: 50ケース">
-      <button class="btn btn-s" onclick="addProposal()">提案を送信</button>
+      
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-s" onclick="openConfirmModal()">確認画面へ進む</button>
+        <button id="cancel-edit-btn" class="btn btn-sub" style="display:none;" onclick="resetForm()">キャンセル</button>
+      </div>
     </div>
-    <div class="card"><div class="card-title">自分の提案履歴</div><div id="sup-list"></div></div>
+
+    <div class="card">
+      <div class="card-title">自分の提案履歴</div>
+      <div id="sup-list"></div>
+    </div>
+
+    <div style="text-align:center; margin-top:20px;">
+      <button class="btn btn-ng btn-sm" onclick="clearAllData()">⚠️ テストデータをすべて消去（初期化）</button>
+    </div>
   </div>
 
   <!-- 画面②：バイヤー -->
   <div id="v-buy" class="view">
     <div class="sav-box">差額貯金残高: <span class="sav-val" id="sav-val">￥0</span></div>
     <div class="card">
-      <div class="card-title">未判定の提案</div>
+      <div class="card-title">未判定の提案一覧</div>
       <div id="buy-list"></div>
     </div>
   </div>
@@ -89,17 +108,68 @@
     </div>
   </div>
 
+  <!-- モーダル1：確認画面 -->
+  <div id="modal-confirm" class="modal-overlay">
+    <div class="modal-box">
+      <h3 style="margin-top:0; font-size:15px; border-bottom:2px solid var(--s); padding-bottom:6px;">提案内容の確認</h3>
+      <div id="confirm-content"></div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button class="btn btn-sub" onclick="closeConfirmModal()">修正する</button>
+        <button class="btn btn-ok" onclick="submitProposal()">確定して送信</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル2：担当者管理 -->
+  <div id="modal-user" class="modal-overlay">
+    <div class="modal-box">
+      <h3 style="margin-top:0; font-size:15px; border-bottom:2px solid var(--s); padding-bottom:6px;">担当者の管理・編集</h3>
+      <label>現在の担当者一覧</label>
+      <div id="user-manage-list" style="margin-bottom:12px;"></div>
+      
+      <label>新しい担当者を追加</label>
+      <div style="display:flex; gap:4px;">
+        <input type="text" id="new-user-name" placeholder="例: Dさん">
+        <button class="btn btn-s btn-sm" style="width:70px; margin:0;" onclick="addUser()">追加</button>
+      </div>
+      <button class="btn btn-sub" style="margin-top:16px;" onclick="closeUserManageModal()">閉じる</button>
+    </div>
+  </div>
+
   <script>
-    let list = JSON.parse(localStorage.getItem('b2b_p')) || [
-      { id:'1', user:'Aさん', name:'サンふじ', spec:'青森/28玉', price:3200, qty:'30箱', status:'wait', finalPrice:0, diff:0, done:false },
-      { id:'2', user:'Bさん', name:'完熟マンゴー', spec:'宮崎/2L', price:5800, qty:'10箱', status:'wait', finalPrice:0, diff:0, done:false }
-    ];
-    let savings = parseInt(localStorage.getItem('b2b_s')) || 15000;
+    // 担当者データ（初期値はAさん、Bさん、Cさん）
+    let users = JSON.parse(localStorage.getItem('b2b_users')) || ['Aさん', 'Bさん', 'Cさん'];
+    
+    // 提案データ（初期データは完全空）
+    let list = JSON.parse(localStorage.getItem('b2b_p')) || [];
+    let savings = parseInt(localStorage.getItem('b2b_s')) || 0;
 
     function save() {
+      localStorage.setItem('b2b_users', JSON.stringify(users));
       localStorage.setItem('b2b_p', JSON.stringify(list));
       localStorage.setItem('b2b_s', savings.toString());
       document.getElementById('sav-val').innerText = '￥' + savings.toLocaleString();
+    }
+
+    // 全データ消去機能
+    function clearAllData() {
+      if(confirm('送信された提案データや貯金残高をすべてクリアしますか？')) {
+        list = [];
+        savings = 0;
+        save();
+        renderSup();
+        alert('データを初期化しました。');
+      }
+    }
+
+    function initUserSelect() {
+      const select = document.getElementById('s-user');
+      const current = select.value;
+      select.innerHTML = '';
+      users.forEach(u => {
+        select.innerHTML += `<option value="${u}">${u}</option>`;
+      });
+      if(users.includes(current)) select.value = current;
     }
 
     function showView(v) {
@@ -111,33 +181,190 @@
       if(v==='clk') renderClk();
     }
 
-    function addProposal() {
+    // --- モーダル・確認画面関連 ---
+    function openConfirmModal() {
       const name = document.getElementById('p-name').value;
       const price = parseInt(document.getElementById('p-price').value) || 0;
-      if(!name || !price) return alert('商品名と単価を入力してください');
-      
-      list.unshift({
-        id: Date.now().toString(),
-        user: document.getElementById('s-user').value,
-        name, spec: document.getElementById('p-spec').value,
-        price, qty: document.getElementById('p-qty').value,
-        status: 'wait', finalPrice: 0, diff: 0, done: false
-      });
-      save(); renderSup();
-      document.getElementById('p-name').value = '';
-      document.getElementById('p-price').value = '';
-      alert('送信しました！');
+      if(!name || !price) return alert('商品名と提案単価は必須です。');
+
+      const user = document.getElementById('s-user').value;
+      const spec = document.getElementById('p-spec').value || '未設定';
+      const qty = document.getElementById('p-qty').value || '未設定';
+
+      document.getElementById('confirm-content').innerHTML = `
+        <div class="confirm-row"><span>担当者:</span><strong>${user}</strong></div>
+        <div class="confirm-row"><span>商品名:</span><strong>${name}</strong></div>
+        <div class="confirm-row"><span>産地/規格:</span><span>${spec}</span></div>
+        <div class="confirm-row"><span>提案単価:</span><strong style="color:var(--s); font-size:15px;">￥${price.toLocaleString()}</strong></div>
+        <div class="confirm-row"><span>限定数量:</span><span>${qty}</span></div>
+      `;
+      document.getElementById('modal-confirm').classList.add('active');
     }
 
+    function closeConfirmModal() {
+      document.getElementById('modal-confirm').classList.remove('active');
+    }
+
+    function submitProposal() {
+      const editId = document.getElementById('editing-id').value;
+      const user = document.getElementById('s-user').value;
+      const name = document.getElementById('p-name').value;
+      const spec = document.getElementById('p-spec').value;
+      const price = parseInt(document.getElementById('p-price').value) || 0;
+      const qty = document.getElementById('p-qty').value;
+
+      if(editId) {
+        const target = list.find(x => x.id === editId);
+        if(target) {
+          target.user = user;
+          target.name = name;
+          target.spec = spec;
+          target.price = price;
+          target.qty = qty;
+        }
+      } else {
+        list.unshift({
+          id: Date.now().toString(),
+          user, name, spec, price, qty,
+          status: 'wait', finalPrice: 0, diff: 0, done: false
+        });
+      }
+
+      save();
+      closeConfirmModal();
+      resetForm();
+      renderSup();
+      alert('提案を送信しました！');
+    }
+
+    function editProposal(id) {
+      const target = list.find(x => x.id === id);
+      if(!target) return;
+
+      document.getElementById('editing-id').value = target.id;
+      document.getElementById('s-user').value = target.user;
+      document.getElementById('p-name').value = target.name;
+      document.getElementById('p-spec').value = target.spec;
+      document.getElementById('p-price').value = target.price;
+      document.getElementById('p-qty').value = target.qty;
+
+      document.getElementById('form-title').innerText = '提案の編集';
+      document.getElementById('cancel-edit-btn').style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteProposal(id) {
+      if(confirm('この提案を削除してもよろしいですか？')) {
+        list = list.filter(x => x.id !== id);
+        save();
+        renderSup();
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('editing-id').value = '';
+      document.getElementById('p-name').value = '';
+      document.getElementById('p-spec').value = '';
+      document.getElementById('p-price').value = '';
+      document.getElementById('p-qty').value = '';
+      document.getElementById('form-title').innerText = '新規提案入力';
+      document.getElementById('cancel-edit-btn').style.display = 'none';
+    }
+
+    // --- 担当者管理関連 ---
+    function openUserManageModal() {
+      renderUserManageList();
+      document.getElementById('modal-user').classList.add('active');
+    }
+
+    function closeUserManageModal() {
+      document.getElementById('modal-user').classList.remove('active');
+      initUserSelect();
+      renderSup();
+    }
+
+    function renderUserManageList() {
+      const container = document.getElementById('user-manage-list');
+      container.innerHTML = '';
+      users.forEach((u, idx) => {
+        container.innerHTML += `
+          <div style="display:flex; gap:4px; margin-bottom:4px;">
+            <input type="text" value="${u}" onchange="updateUserName(${idx}, this.value)">
+            <button class="btn btn-ng btn-sm" style="width:50px; margin:0;" onclick="deleteUser(${idx})">削除</button>
+          </div>
+        `;
+      });
+    }
+
+    function updateUserName(idx, newName) {
+      if(!newName.trim()) return;
+      const oldName = users[idx];
+      users[idx] = newName.trim();
+      list.forEach(p => { if(p.user === oldName) p.user = newName.trim(); });
+      save();
+    }
+
+    function addUser() {
+      const input = document.getElementById('new-user-name');
+      const val = input.value.trim();
+      if(!val) return;
+      if(users.includes(val)) return alert('すでに存在する名前です');
+      users.push(val);
+      input.value = '';
+      save();
+      renderUserManageList();
+    }
+
+    function deleteUser(idx) {
+      if(users.length <= 1) return alert('担当者は最低1人必要です');
+      if(confirm(`${users[idx]} を削除しますか？`)) {
+        users.splice(idx, 1);
+        save();
+        renderUserManageList();
+      }
+    }
+
+    // --- 画面描画 ---
     function renderSup() {
+      initUserSelect();
       const u = document.getElementById('s-user').value;
       const el = document.getElementById('sup-list');
       el.innerHTML = '';
-      list.filter(p => p.user === u).forEach(p => {
+
+      const myProposals = list.filter(p => p.user === u);
+      if(!myProposals.length) {
+        el.innerHTML = '<div style="font-size:12px;color:#888;">この担当者の提案履歴はありません</div>';
+        return;
+      }
+
+      myProposals.forEach(p => {
         let b = '<span class="badge bg-wait">判定待ち</span>';
-        if(p.status==='ok') b = `<span class="badge bg-ok">確定(￥${p.finalPrice})</span>`;
-        if(p.status==='ng') b = '<span class="badge bg-ng">NG</span>';
-        el.innerHTML += `<div class="item-card"><div style="display:flex;justify-shadow:space-between;justify-content:space-between;"><strong>${p.name}</strong>${b}</div><div style="font-size:11px;color:#666;">${p.spec} | ￥${p.price.toLocaleString()} (${p.qty})</div></div>`;
+        let actionBtns = '';
+
+        if(p.status==='wait') {
+          actionBtns = `
+            <div style="margin-top:6px; text-align:right;">
+              <button class="btn btn-s btn-sm" onclick="editProposal('${p.id}')">編集</button>
+              <button class="btn btn-ng btn-sm" onclick="deleteProposal('${p.id}')">削除</button>
+            </div>
+          `;
+        } else if(p.status==='ok') {
+          b = `<span class="badge bg-ok">確定(￥${p.finalPrice.toLocaleString()})</span>`;
+        } else if(p.status==='ng') {
+          b = '<span class="badge bg-ng">NG</span>';
+        }
+
+        el.innerHTML += `
+          <div class="item-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong>${p.name}</strong>${b}
+            </div>
+            <div style="font-size:11px; color:#666; margin-top:2px;">
+              ${p.spec} | ￥${p.price.toLocaleString()} (${p.qty})
+            </div>
+            ${actionBtns}
+          </div>
+        `;
       });
     }
 
@@ -150,7 +377,7 @@
       
       waits.forEach(p => {
         el.innerHTML += `<div class="item-card">
-          <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.user}</div>
+          <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.user} の提案</div>
           <strong>${p.name}</strong> (${p.spec})
           <div style="font-size:12px;">提案単価: <strong>￥${p.price.toLocaleString()}</strong> / ${p.qty}</div>
           <div class="act-btns">
@@ -202,6 +429,7 @@
       if(p) { p.done = !p.done; save(); renderClk(); }
     }
 
+    initUserSelect();
     renderSup();
   </script>
 </body>
