@@ -3,17 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>仲卸・バイヤー価格提案システム</title>
-  <!-- Supabase JS Client -->
+  <title>価格提案システム</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root { --p: #2c3e50; --s: #3498db; --ok: #27ae60; --ng: #e74c3c; --bg: #f4f6f8; }
     body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 12px; color: #333; }
     h1 { font-size: 16px; text-align: center; color: var(--p); margin: 4px 0 8px; }
     
-    /* ログイン・モード選択エリア */
-    .auth-bar { background: var(--p); color: #fff; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
-    .auth-bar select { padding: 4px 8px; font-size: 12px; font-weight: bold; border-radius: 4px; border: none; }
+    /* ログイン画面スタイル */
+    .login-container { max-width: 360px; margin: 40px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .login-title { text-align: center; font-size: 18px; font-weight: bold; color: var(--p); margin-bottom: 16px; }
+    
+    /* ユーザー情報ヘッダー */
+    .user-bar { background: var(--p); color: #fff; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .logout-btn { background: #e74c3c; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
     .tabs { display: flex; gap: 4px; margin-bottom: 12px; background: #ddd; padding: 3px; border-radius: 8px; }
     .tab { flex: 1; padding: 8px 2px; text-align: center; font-size: 12px; font-weight: bold; background: none; border: none; border-radius: 6px; cursor: pointer; }
@@ -53,89 +56,90 @@
 </head>
 <body>
 
-  <h1>仲卸・バイヤー価格提案システム</h1>
-
-  <!-- 操作権限（モード）選択バー -->
-  <div class="auth-bar">
-    <span>👤 ログイン権限:</span>
-    <select id="role-select" onchange="switchRole()">
-      <option value="supplier">仲卸担当者モード</option>
-      <option value="buyer">バイヤー専用モード</option>
-      <option value="clerk">事務員専用モード</option>
-      <option value="all">【管理者】全画面表示</option>
-    </select>
+  <!-- 1. ログイン画面（初期表示） -->
+  <div id="login-screen" class="login-container">
+    <div class="login-title">🔒 システムログイン</div>
+    <div id="login-error" style="color:var(--ng); font-size:11px; margin-bottom:8px; text-align:center; display:none;"></div>
+    <label>ユーザーID（またはメールアドレス）</label>
+    <input type="text" id="login-id" placeholder="例: buyer1">
+    <label>パスワード</label>
+    <input type="password" id="login-pw" placeholder="••••••••">
+    <button class="btn btn-s" style="margin-top:16px;" onclick="handleLogin()">ログイン</button>
   </div>
 
-  <div class="tabs" id="tab-bar">
-    <button class="tab active" id="tab-sup" onclick="showView('sup')">① 仲卸担当</button>
-    <button class="tab" id="tab-buy" onclick="showView('buy')">② バイヤー判定</button>
-    <button class="tab" id="tab-clk" onclick="showView('clk')">③ 事務員確認</button>
-  </div>
+  <!-- 2. アプリメイン画面（ログイン後表示） -->
+  <div id="app-screen" style="display:none;">
+    <h1>価格提案システム</h1>
 
-  <!-- 画面①：仲卸 -->
-  <div id="v-sup" class="view active">
-    <div class="card">
-      <div class="card-title">
-        <span id="form-title">新規提案入力</span>
-        <div>
-          <select id="s-user" style="width:auto; font-size:11px;" onchange="renderSup()"></select>
-          <button class="btn btn-sub btn-sm" onclick="openUserModal()">⚙️ 管理</button>
+    <div class="user-bar">
+      <div>👤 ログイン中: <strong id="user-display-name">---</strong> (<span id="user-role-name">---</span>)</div>
+      <button class="logout-btn" onclick="handleLogout()">ログアウト</button>
+    </div>
+
+    <div class="tabs" id="tab-bar">
+      <button class="tab" id="tab-sup" onclick="showView('sup')">① 仲卸担当</button>
+      <button class="tab" id="tab-buy" onclick="showView('buy')">② バイヤー判定</button>
+      <button class="tab" id="tab-clk" onclick="showView('clk')">③ 事務員確認</button>
+    </div>
+
+    <!-- 画面①：仲卸 -->
+    <div id="v-sup" class="view">
+      <div class="card">
+        <div class="card-title"><span id="form-title">新規提案入力</span></div>
+        <input type="hidden" id="editing-id" value="">
+        <label>担当者名</label>
+        <input type="text" id="s-user-name" placeholder="例: 山田" readonly style="background:#f0f0f0;">
+        <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
+        <div class="grid">
+          <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
+          <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
+        </div>
+        <label>限定数量</label><input type="text" id="p-qty" placeholder="例: 50ケース">
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-s" onclick="openConfirmModal()">確認画面へ進む</button>
+          <button id="cancel-edit-btn" class="btn btn-sub" style="display:none;" onclick="resetForm()">キャンセル</button>
         </div>
       </div>
-      <input type="hidden" id="editing-id" value="">
-      <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
-      <div class="grid">
-        <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
-        <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
-      </div>
-      <label>限定数量</label><input type="text" id="p-qty" placeholder="例: 50ケース">
-      
-      <div style="display:flex; gap:6px;">
-        <button class="btn btn-s" onclick="openConfirmModal()">確認画面へ進む</button>
-        <button id="cancel-edit-btn" class="btn btn-sub" style="display:none;" onclick="resetForm()">キャンセル</button>
+      <div class="card">
+        <div class="card-title">自分の提案履歴</div>
+        <div id="sup-list">データ読み込み中...</div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">自分の提案履歴</div>
-      <div id="sup-list">データ読み込み中...</div>
+    <!-- 画面②：バイヤー -->
+    <div id="v-buy" class="view">
+      <div class="sav-box">現在の差額貯金残高: <span class="sav-val" id="sav-val-buy">￥0</span></div>
+      <div class="card">
+        <div class="card-title">未判定の提案一覧</div>
+        <div id="buy-list">データ読み込み中...</div>
+      </div>
+    </div>
+
+    <!-- 画面③：事務員 -->
+    <div id="v-clk" class="view">
+      <div class="card" style="background:#eef9f1; border:1px solid var(--ok);">
+        <div class="card-title" style="border-bottom-color:var(--ok);">💰 バイヤー差額貯金残高の管理</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:12px; font-weight:bold;">現在の残高:</span>
+          <span class="sav-val" id="sav-val-clk">￥0</span>
+        </div>
+        <label>残高を直接修正（手動入力）</label>
+        <div style="display:flex; gap:4px; margin-top:2px;">
+          <input type="number" id="manual-savings-input" placeholder="例: 20000" style="background:#fff;">
+          <button class="btn btn-ok btn-sm" style="width:80px; margin:0;" onclick="updateSavingsManual()">残高更新</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">本日確定データ一覧</div>
+        <table>
+          <thead><tr><th>転記</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>貯金差額</th></tr></thead>
+          <tbody id="clk-list"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <!-- 画面②：バイヤー -->
-  <div id="v-buy" class="view">
-    <div class="sav-box">現在の差額貯金残高: <span class="sav-val" id="sav-val-buy">￥0</span></div>
-    <div class="card">
-      <div class="card-title">未判定の提案一覧</div>
-      <div id="buy-list">データ読み込み中...</div>
-    </div>
-  </div>
-
-  <!-- 画面③：事務員 -->
-  <div id="v-clk" class="view">
-    <div class="card" style="background:#eef9f1; border:1px solid var(--ok);">
-      <div class="card-title" style="border-bottom-color:var(--ok);">💰 バイヤー差額貯金残高の管理</div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <span style="font-size:12px; font-weight:bold;">現在の残高:</span>
-        <span class="sav-val" id="sav-val-clk">￥0</span>
-      </div>
-      <label>残高を直接修正（手動入力）</label>
-      <div style="display:flex; gap:4px; margin-top:2px;">
-        <input type="number" id="manual-savings-input" placeholder="例: 20000" style="background:#fff;">
-        <button class="btn btn-ok btn-sm" style="width:80px; margin:0;" onclick="updateSavingsManual()">残高更新</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">本日確定データ一覧</div>
-      <table>
-        <thead><tr><th>転記</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>貯金差額</th></tr></thead>
-        <tbody id="clk-list"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- モーダル1：確認画面 -->
+  <!-- モーダル：確認画面 -->
   <div id="modal-confirm" class="modal-overlay">
     <div class="modal-box">
       <h3 style="margin-top:0; font-size:15px; border-bottom:2px solid var(--s); padding-bottom:6px;">提案内容の確認</h3>
@@ -147,66 +151,119 @@
     </div>
   </div>
 
-  <!-- モーダル2：担当者管理 -->
-  <div id="modal-user" class="modal-overlay">
-    <div class="modal-box">
-      <h3 style="margin-top:0; font-size:15px; border-bottom:2px solid var(--s); padding-bottom:6px;">担当者の管理</h3>
-      <label>現在の担当者一覧</label>
-      <div id="user-manage-list" style="margin-bottom:12px;"></div>
-      <label>新しい担当者を追加</label>
-      <div style="display:flex; gap:4px;">
-        <input type="text" id="new-user-name" placeholder="例: Dさん">
-        <button class="btn btn-s btn-sm" style="width:70px; margin:0;" onclick="addUser()">追加</button>
-      </div>
-      <button class="btn btn-sub" style="margin-top:16px;" onclick="closeUserModal()">閉じる</button>
-    </div>
-  </div>
-
   <script>
-    // Supabase接続設定（ご自身のプロジェクトURLとAnonキー）
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MzY4OTIwOSwiZXhwIjoyMDY5MjY1MjA5fQ.L_eGkL1-43I3aO8Xj7p2w7E90GvSg7yB80R6I_qKx5g'; // SupabaseのLegacy anonキーを適用
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MzY4OTIwOSwiZXhwIjoyMDY5MjY1MjA5fQ.L_eGkL1-43I3aO8Xj7p2w7E90GvSg7yB80R6I_qKx5g';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    let users = ['Aさん', 'Bさん', 'Cさん'];
+    let currentUser = null;
+    let currentProfile = null;
     let proposals = [];
     let savingsBalance = 0;
 
-    // 初期ロード
     async function init() {
-      await fetchUsers();
-      await fetchProposals();
-      await fetchSavings();
-      switchRole();
+      const { data: { session } } = await _supabase.auth.getSession();
+      if (session) {
+        currentUser = session.user;
+        await loadUserProfile();
+      } else {
+        showLoginScreen();
+      }
 
-      // リアルタイム同期（他端末での変更を自動検知）
       _supabase.channel('public:all')
         .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-          fetchProposals();
-          fetchSavings();
-        })
-        .subscribe();
+          if (currentUser) { fetchProposals(); fetchSavings(); }
+        }).subscribe();
     }
 
-    async function fetchUsers() {
-      const { data } = await _supabase.from('users').select('*');
-      if (data && data.length > 0) {
-        users = data.map(u => u.name);
-      } else {
-        // 初期登録
-        for (let name of ['Aさん', 'Bさん', 'Cさん']) {
-          await _supabase.from('users').insert({ name, role: 'supplier' });
-        }
+    async function handleLogin() {
+      let rawId = document.getElementById('login-id').value.trim();
+      const pw = document.getElementById('login-pw').value;
+      const errEl = document.getElementById('login-error');
+      errEl.style.display = 'none';
+
+      if (!rawId || !pw) {
+        errEl.innerText = 'IDとパスワードを入力してください';
+        errEl.style.display = 'block';
+        return;
       }
-      initUserSelect();
+
+      let email = rawId.includes('@') ? rawId : `${rawId}@b2b.internal`;
+
+      const { data, error } = await _supabase.auth.signInWithPassword({ email, password: pw });
+      if (error) {
+        errEl.innerText = 'IDまたはパスワードが正しくありません';
+        errEl.style.display = 'block';
+      } else {
+        currentUser = data.user;
+        await loadUserProfile();
+      }
+    }
+
+    async function handleLogout() {
+      await _supabase.auth.signOut();
+      currentUser = null;
+      currentProfile = null;
+      showLoginScreen();
+    }
+
+    async function loadUserProfile() {
+      const { data } = await _supabase.from('profiles').select('*').eq('id', currentUser.id).single();
+      currentProfile = data || { role: 'supplier', display_name: currentUser.email.split('@')[0] };
+
+      document.getElementById('user-display-name').innerText = currentProfile.display_name;
+      document.getElementById('s-user-name').value = currentProfile.display_name;
+
+      const roleLabels = { supplier: '仲卸担当', buyer: 'バイヤー', clerk: '事務員', admin: '管理者' };
+      document.getElementById('user-role-name').innerText = roleLabels[currentProfile.role] || '担当者';
+
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-screen').style.display = 'block';
+
+      setupViewByRole(currentProfile.role);
+      fetchProposals();
+      fetchSavings();
+    }
+
+    function setupViewByRole(role) {
+      const tabSup = document.getElementById('tab-sup');
+      const tabBuy = document.getElementById('tab-buy');
+      const tabClk = document.getElementById('tab-clk');
+
+      tabSup.style.display = 'none';
+      tabBuy.style.display = 'none';
+      tabClk.style.display = 'none';
+
+      if (role === 'buyer') {
+        tabBuy.style.display = 'block';
+        showView('buy');
+      } else if (role === 'clerk') {
+        tabClk.style.display = 'block';
+        showView('clk');
+      } else if (role === 'admin') {
+        tabSup.style.display = 'block'; tabBuy.style.display = 'block'; tabClk.style.display = 'block';
+        showView('sup');
+      } else {
+        tabSup.style.display = 'block';
+        showView('sup');
+      }
+    }
+
+    function showLoginScreen() {
+      document.getElementById('login-screen').style.display = 'block';
+      document.getElementById('app-screen').style.display = 'none';
+    }
+
+    function showView(v) {
+      document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (v==='sup'&&i===0)||(v==='buy'&&i===1)||(v==='clk'&&i===2)));
+      document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
+      document.getElementById('v-' + v).classList.add('active');
     }
 
     async function fetchProposals() {
       const { data } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
       if (data) proposals = data;
-      renderSup();
-      renderBuy();
-      renderClk();
+      renderSup(); renderBuy(); renderClk();
     }
 
     async function fetchSavings() {
@@ -218,49 +275,13 @@
       }
     }
 
-    function initUserSelect() {
-      const select = document.getElementById('s-user');
-      const cur = select.value;
-      select.innerHTML = '';
-      users.forEach(u => select.innerHTML += `<option value="${u}">${u}</option>`);
-      if (users.includes(cur)) select.value = cur;
-    }
-
-    function switchRole() {
-      const r = document.getElementById('role-select').value;
-      const tabSup = document.getElementById('tab-sup');
-      const tabBuy = document.getElementById('tab-buy');
-      const tabClk = document.getElementById('tab-clk');
-
-      if (r === 'supplier') {
-        tabSup.style.display = 'block'; tabBuy.style.display = 'none'; tabClk.style.display = 'none';
-        showView('sup');
-      } else if (r === 'buyer') {
-        tabSup.style.display = 'none'; tabBuy.style.display = 'block'; tabClk.style.display = 'none';
-        showView('buy');
-      } else if (r === 'clerk') {
-        tabSup.style.display = 'none'; tabBuy.style.display = 'none'; tabClk.style.display = 'block';
-        showView('clk');
-      } else {
-        tabSup.style.display = 'block'; tabBuy.style.display = 'block'; tabClk.style.display = 'block';
-        showView('sup');
-      }
-    }
-
-    function showView(v) {
-      document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (v==='sup'&&i===0)||(v==='buy'&&i===1)||(v==='clk'&&i===2)));
-      document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
-      document.getElementById('v-' + v).classList.add('active');
-    }
-
-    // モーダル・確認画面
     function openConfirmModal() {
       const name = document.getElementById('p-name').value;
       const price = parseInt(document.getElementById('p-price').value) || 0;
       if (!name || !price) return alert('商品名と提案単価は必須です');
 
       document.getElementById('confirm-content').innerHTML = `
-        <div class="confirm-row"><span>担当者:</span><strong>${document.getElementById('s-user').value}</strong></div>
+        <div class="confirm-row"><span>担当者:</span><strong>${currentProfile.display_name}</strong></div>
         <div class="confirm-row"><span>商品名:</span><strong>${name}</strong></div>
         <div class="confirm-row"><span>規格:</span><span>${document.getElementById('p-spec').value || '未設定'}</span></div>
         <div class="confirm-row"><span>提案単価:</span><strong style="color:var(--s);">￥${price.toLocaleString()}</strong></div>
@@ -269,14 +290,12 @@
       document.getElementById('modal-confirm').classList.add('active');
     }
 
-    function closeConfirmModal() {
-      document.getElementById('modal-confirm').classList.remove('active');
-    }
+    function closeConfirmModal() { document.getElementById('modal-confirm').classList.remove('active'); }
 
     async function submitProposal() {
       const editId = document.getElementById('editing-id').value;
       const payload = {
-        user_name: document.getElementById('s-user').value,
+        user_name: currentProfile.display_name,
         product_name: document.getElementById('p-name').value,
         spec: document.getElementById('p-spec').value,
         proposed_price: parseInt(document.getElementById('p-price').value) || 0,
@@ -296,26 +315,6 @@
       alert('提案をクラウドへ送信しました！');
     }
 
-    function editProposal(id) {
-      const p = proposals.find(x => x.id === id);
-      if (!p) return;
-      document.getElementById('editing-id').value = p.id;
-      document.getElementById('s-user').value = p.user_name;
-      document.getElementById('p-name').value = p.product_name;
-      document.getElementById('p-spec').value = p.spec;
-      document.getElementById('p-price').value = p.proposed_price;
-      document.getElementById('p-qty').value = p.limited_quantity;
-      document.getElementById('form-title').innerText = '提案の編集';
-      document.getElementById('cancel-edit-btn').style.display = 'block';
-    }
-
-    async function deleteProposal(id) {
-      if (confirm('削除してもよろしいですか？')) {
-        await _supabase.from('proposals').delete().eq('id', id);
-        await fetchProposals();
-      }
-    }
-
     function resetForm() {
       document.getElementById('editing-id').value = '';
       document.getElementById('p-name').value = '';
@@ -326,35 +325,26 @@
       document.getElementById('cancel-edit-btn').style.display = 'none';
     }
 
-    // 判定（バイヤー）
     async function judge(id, type) {
       const p = proposals.find(x => x.id === id);
       const df = parseInt(document.getElementById(`df-${id}`)?.value) || 0;
-      let status = 'approved';
-      let finalPrice = p.proposed_price;
-      let diff = 0;
+      let status = 'approved', finalPrice = p.proposed_price, diff = 0;
 
       if (type === 'ng') {
         status = 'rejected';
       } else if (type === 'add') {
         if (df <= 0) return alert('金額を入力してください');
-        finalPrice = p.proposed_price + df;
-        diff = df;
-        savingsBalance += df;
+        finalPrice = p.proposed_price + df; diff = df; savingsBalance += df;
       } else if (type === 'sub') {
         if (df <= 0 || df > savingsBalance) return alert('残高を確認してください');
-        finalPrice = p.proposed_price - df;
-        diff = -df;
-        savingsBalance -= df;
+        finalPrice = p.proposed_price - df; diff = -df; savingsBalance -= df;
       }
 
       await _supabase.from('proposals').update({ status, final_price: finalPrice, savings_diff: diff }).eq('id', id);
       await _supabase.from('savings_bank').update({ balance: savingsBalance }).eq('id', 1);
-      await fetchProposals();
-      await fetchSavings();
+      await fetchProposals(); await fetchSavings();
     }
 
-    // 事務員 残高更新
     async function updateSavingsManual() {
       const val = parseInt(document.getElementById('manual-savings-input').value);
       if (isNaN(val)) return alert('正しい金額を入力してください');
@@ -369,25 +359,18 @@
       await fetchProposals();
     }
 
-    // 描画処理
     function renderSup() {
-      const u = document.getElementById('s-user').value;
       const el = document.getElementById('sup-list');
-      const list = proposals.filter(p => p.user_name === u);
+      const list = proposals.filter(p => p.user_name === currentProfile?.display_name);
       if (!list.length) return el.innerHTML = '<div style="font-size:12px;color:#888;">提案履歴はありません</div>';
 
       el.innerHTML = '';
       list.forEach(p => {
         let b = '<span class="badge bg-wait">判定待ち</span>';
-        let act = '';
-        if (p.status === 'pending') {
-          act = `<div style="text-align:right; margin-top:4px;"><button class="btn btn-s btn-sm" onclick="editProposal('${p.id}')">編集</button> <button class="btn btn-ng btn-sm" onclick="deleteProposal('${p.id}')">削除</button></div>`;
-        } else if (p.status === 'approved') {
-          b = `<span class="badge bg-ok">確定(￥${p.final_price.toLocaleString()})</span>`;
-        } else {
-          b = '<span class="badge bg-ng">NG</span>';
-        }
-        el.innerHTML += `<div class="item-card"><div style="display:flex;justify-content:space-between;"><strong>${p.product_name}</strong>${b}</div><div style="font-size:11px;color:#666;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div>${act}</div>`;
+        if (p.status === 'approved') b = `<span class="badge bg-ok">確定(￥${p.final_price.toLocaleString()})</span>`;
+        else if (p.status === 'rejected') b = '<span class="badge bg-ng">NG</span>';
+        
+        el.innerHTML += `<div class="item-card"><div style="display:flex;justify-content:space-between;"><strong>${p.product_name}</strong>${b}</div><div style="font-size:11px;color:#666;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div></div>`;
       });
     }
 
@@ -432,17 +415,6 @@
       });
     }
 
-    function openUserModal() { document.getElementById('modal-user').classList.add('active'); }
-    function closeUserModal() { document.getElementById('modal-user').classList.remove('active'); }
-    async function addUser() {
-      const val = document.getElementById('new-user-name').value.trim();
-      if (!val) return;
-      await _supabase.from('users').insert({ name: val, role: 'supplier' });
-      document.getElementById('new-user-name').value = '';
-      await fetchUsers();
-    }
-
-    // アプリ起動
     init();
   </script>
 </body>
