@@ -45,7 +45,6 @@
     .draft-table th, .draft-table td { border: 1px solid #ddd; padding: 6px 4px; text-align: left; }
     .draft-table th { background: #f8f9fa; }
 
-    /* 営業完了ステータス表示ボックス */
     .staff-status-box { background: #eef7fc; border: 1px solid var(--s); border-radius: 6px; padding: 10px; margin-bottom: 12px; }
     .staff-status-title { font-size: 12px; font-weight: bold; color: var(--p); margin-bottom: 6px; }
     .staff-tags { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -65,7 +64,6 @@
     .view { display: none; }
     .view.active { display: block; }
 
-    /* 印刷専用スタイル */
     @media print {
       body { background: #fff; padding: 0; color: #000; }
       h1, .user-bar, .tabs, .staff-status-box, .btn, .sav-box, #login-screen, .no-print { display: none !important; }
@@ -110,12 +108,9 @@
 
     <!-- 画面①：仲卸（営業） -->
     <div id="v-sup" class="view">
-      <!-- 営業入力完了ステータスバー -->
       <div class="staff-status-box">
         <div class="staff-status-title">📋 本日の下書き入力状況</div>
-        <div class="staff-tags" id="staff-status-tags">
-          <!-- JSで自動判定表示 -->
-        </div>
+        <div class="staff-tags" id="staff-status-tags"></div>
       </div>
 
       <div class="card">
@@ -131,7 +126,6 @@
           </div>
         </div>
 
-        <!-- 提案なし完了ボタン -->
         <button class="btn btn-sub" style="margin-top:8px;" onclick="addNoProposalDraft()">🚫 本日は提案なし（完了として登録）</button>
 
         <div style="background:#f8f9fa; padding:8px; border-radius:6px; border:1px solid #e0e0e0; margin-top:8px;">
@@ -205,6 +199,7 @@
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const LINE_BOT_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
 
     let _supabase = null;
     try {
@@ -405,7 +400,6 @@
       await fetchProposals();
     }
 
-    // 「提案なし」登録処理
     async function addNoProposalDraft() {
       const rawStaffName = document.getElementById('s-user-name').value.trim();
       const targetDate = document.getElementById('p-target-date').value;
@@ -442,23 +436,46 @@
       if (!error) await fetchProposals();
     }
 
+    // ★ 画面から1回だけ確実にLINE通知を飛ばす関数 ★
+    async function sendLineNotificationDirect() {
+      try {
+        await fetch('https://api.line.me/v2/bot/message/broadcast', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${LINE_BOT_TOKEN}`
+          },
+          body: JSON.stringify({
+            messages: [{
+              type: 'text',
+              text: '【価格提案システム】\n三澤商事より、本日分の提案がバイヤー画面に届きました！\n確認をお願いいたします。'
+            }]
+          })
+        });
+      } catch(e) {
+        console.error('LINE notification error:', e);
+      }
+    }
+
     async function publishNowManual() {
-      // 提案なしの行を自動で除外して、有効な提案だけ送信
       const drafts = proposals.filter(p => p.status === 'draft');
       const validDrafts = drafts.filter(p => p.product_name !== '（本日提案なし）');
 
       if (!drafts.length) return alert('下書きリストに品目がありません');
 
-      if (confirm(`下書きにある提案を送信しますか？\n（「提案なし」データは自動でクリアされます）`)) {
+      if (confirm(`下書きにある提案を送信しますか？`)) {
         if (validDrafts.length > 0) {
           const validIds = validDrafts.map(p => p.id);
           await _supabase.from('proposals').update({ status: 'pending' }).in('id', validIds);
         }
-        // 「提案なし」のダミーデータを削除
+        
         const noPropIds = drafts.filter(p => p.product_name === '（本日提案なし）').map(p => p.id);
         if (noPropIds.length > 0) {
           await _supabase.from('proposals').delete().in('id', noPropIds);
         }
+
+        // 送信ボタンを押したタイミングで、LINEへ1回だけ確実に送信
+        await sendLineNotificationDirect();
 
         await fetchProposals();
         alert('バイヤーへ送信完了しました！（LINE通知も送信されました）');
@@ -512,7 +529,6 @@
       const draftTbody = document.getElementById('draft-list-body');
       const drafts = proposals.filter(p => p.status === 'draft');
       
-      // 下書きに入力がある担当者を自動集計
       const finishedStaffs = {};
       drafts.forEach(p => {
         const cleanName = p.user_name.replace('三澤（', '').replace('）', '').trim();
@@ -523,7 +539,6 @@
         }
       });
 
-      // 入力状況タグの描画
       const statusBox = document.getElementById('staff-status-tags');
       statusBox.innerHTML = '';
       const staffKeys = Object.keys(finishedStaffs);
