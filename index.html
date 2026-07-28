@@ -4,10 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>仲卸・バイヤー価格提案システム</title>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root { --p: #2c3e50; --s: #3498db; --ok: #27ae60; --ng: #e74c3c; --bg: #f4f6f8; }
     body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 12px; color: #333; }
-    h1 { font-size: 16px; text-align: center; color: var(--p); margin: 4px 0 12px; }
+    h1 { font-size: 16px; text-align: center; color: var(--p); margin: 4px 0 8px; }
+    
+    /* ログイン・モード選択エリア */
+    .auth-bar { background: var(--p); color: #fff; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .auth-bar select { padding: 4px 8px; font-size: 12px; font-weight: bold; border-radius: 4px; border: none; }
+
     .tabs { display: flex; gap: 4px; margin-bottom: 12px; background: #ddd; padding: 3px; border-radius: 8px; }
     .tab { flex: 1; padding: 8px 2px; text-align: center; font-size: 12px; font-weight: bold; background: none; border: none; border-radius: 6px; cursor: pointer; }
     .tab.active { background: #fff; color: var(--p); }
@@ -48,10 +55,21 @@
 
   <h1>仲卸・バイヤー価格提案システム</h1>
 
-  <div class="tabs">
-    <button class="tab active" onclick="showView('sup')">① 仲卸担当</button>
-    <button class="tab" onclick="showView('buy')">② バイヤー判定</button>
-    <button class="tab" onclick="showView('clk')">③ 事務員確認</button>
+  <!-- 操作権限（モード）選択バー -->
+  <div class="auth-bar">
+    <span>👤 ログイン権限:</span>
+    <select id="role-select" onchange="switchRole()">
+      <option value="supplier">仲卸担当者モード</option>
+      <option value="buyer">バイヤー専用モード</option>
+      <option value="clerk">事務員専用モード</option>
+      <option value="all">【管理者】全画面表示</option>
+    </select>
+  </div>
+
+  <div class="tabs" id="tab-bar">
+    <button class="tab active" id="tab-sup" onclick="showView('sup')">① 仲卸担当</button>
+    <button class="tab" id="tab-buy" onclick="showView('buy')">② バイヤー判定</button>
+    <button class="tab" id="tab-clk" onclick="showView('clk')">③ 事務員確認</button>
   </div>
 
   <!-- 画面①：仲卸 -->
@@ -61,7 +79,7 @@
         <span id="form-title">新規提案入力</span>
         <div>
           <select id="s-user" style="width:auto; font-size:11px;" onchange="renderSup()"></select>
-          <button class="btn btn-sub btn-sm" onclick="openUserManageModal()">⚙️ 管理</button>
+          <button class="btn btn-sub btn-sm" onclick="openUserModal()">⚙️ 管理</button>
         </div>
       </div>
       <input type="hidden" id="editing-id" value="">
@@ -80,25 +98,34 @@
 
     <div class="card">
       <div class="card-title">自分の提案履歴</div>
-      <div id="sup-list"></div>
-    </div>
-
-    <div style="text-align:center; margin-top:20px;">
-      <button class="btn btn-ng btn-sm" onclick="clearAllData()">⚠️ テストデータをすべて消去（初期化）</button>
+      <div id="sup-list">データ読み込み中...</div>
     </div>
   </div>
 
   <!-- 画面②：バイヤー -->
   <div id="v-buy" class="view">
-    <div class="sav-box">差額貯金残高: <span class="sav-val" id="sav-val">￥0</span></div>
+    <div class="sav-box">現在の差額貯金残高: <span class="sav-val" id="sav-val-buy">￥0</span></div>
     <div class="card">
       <div class="card-title">未判定の提案一覧</div>
-      <div id="buy-list"></div>
+      <div id="buy-list">データ読み込み中...</div>
     </div>
   </div>
 
   <!-- 画面③：事務員 -->
   <div id="v-clk" class="view">
+    <div class="card" style="background:#eef9f1; border:1px solid var(--ok);">
+      <div class="card-title" style="border-bottom-color:var(--ok);">💰 バイヤー差額貯金残高の管理</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="font-size:12px; font-weight:bold;">現在の残高:</span>
+        <span class="sav-val" id="sav-val-clk">￥0</span>
+      </div>
+      <label>残高を直接修正（手動入力）</label>
+      <div style="display:flex; gap:4px; margin-top:2px;">
+        <input type="number" id="manual-savings-input" placeholder="例: 20000" style="background:#fff;">
+        <button class="btn btn-ok btn-sm" style="width:80px; margin:0;" onclick="updateSavingsManual()">残高更新</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-title">本日確定データ一覧</div>
       <table>
@@ -123,80 +150,121 @@
   <!-- モーダル2：担当者管理 -->
   <div id="modal-user" class="modal-overlay">
     <div class="modal-box">
-      <h3 style="margin-top:0; font-size:15px; border-bottom:2px solid var(--s); padding-bottom:6px;">担当者の管理・編集</h3>
+      <h3 style="margin-top:0; font-size:15px; border-bottom:2px solid var(--s); padding-bottom:6px;">担当者の管理</h3>
       <label>現在の担当者一覧</label>
       <div id="user-manage-list" style="margin-bottom:12px;"></div>
-      
       <label>新しい担当者を追加</label>
       <div style="display:flex; gap:4px;">
         <input type="text" id="new-user-name" placeholder="例: Dさん">
         <button class="btn btn-s btn-sm" style="width:70px; margin:0;" onclick="addUser()">追加</button>
       </div>
-      <button class="btn btn-sub" style="margin-top:16px;" onclick="closeUserManageModal()">閉じる</button>
+      <button class="btn btn-sub" style="margin-top:16px;" onclick="closeUserModal()">閉じる</button>
     </div>
   </div>
 
   <script>
-    // 担当者データ（初期値はAさん、Bさん、Cさん）
-    let users = JSON.parse(localStorage.getItem('b2b_users')) || ['Aさん', 'Bさん', 'Cさん'];
-    
-    // 提案データ（初期データは完全空）
-    let list = JSON.parse(localStorage.getItem('b2b_p')) || [];
-    let savings = parseInt(localStorage.getItem('b2b_s')) || 0;
+    // Supabase接続設定（ご自身のプロジェクトURLとAnonキー）
+    const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MzY4OTIwOSwiZXhwIjoyMDY5MjY1MjA5fQ.L_eGkL1-43I3aO8Xj7p2w7E90GvSg7yB80R6I_qKx5g'; // SupabaseのLegacy anonキーを適用
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    function save() {
-      localStorage.setItem('b2b_users', JSON.stringify(users));
-      localStorage.setItem('b2b_p', JSON.stringify(list));
-      localStorage.setItem('b2b_s', savings.toString());
-      document.getElementById('sav-val').innerText = '￥' + savings.toLocaleString();
+    let users = ['Aさん', 'Bさん', 'Cさん'];
+    let proposals = [];
+    let savingsBalance = 0;
+
+    // 初期ロード
+    async function init() {
+      await fetchUsers();
+      await fetchProposals();
+      await fetchSavings();
+      switchRole();
+
+      // リアルタイム同期（他端末での変更を自動検知）
+      _supabase.channel('public:all')
+        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+          fetchProposals();
+          fetchSavings();
+        })
+        .subscribe();
     }
 
-    // 全データ消去機能
-    function clearAllData() {
-      if(confirm('送信された提案データや貯金残高をすべてクリアしますか？')) {
-        list = [];
-        savings = 0;
-        save();
-        renderSup();
-        alert('データを初期化しました。');
+    async function fetchUsers() {
+      const { data } = await _supabase.from('users').select('*');
+      if (data && data.length > 0) {
+        users = data.map(u => u.name);
+      } else {
+        // 初期登録
+        for (let name of ['Aさん', 'Bさん', 'Cさん']) {
+          await _supabase.from('users').insert({ name, role: 'supplier' });
+        }
+      }
+      initUserSelect();
+    }
+
+    async function fetchProposals() {
+      const { data } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
+      if (data) proposals = data;
+      renderSup();
+      renderBuy();
+      renderClk();
+    }
+
+    async function fetchSavings() {
+      const { data } = await _supabase.from('savings_bank').select('balance').eq('id', 1).single();
+      if (data) {
+        savingsBalance = data.balance;
+        document.getElementById('sav-val-buy').innerText = '￥' + savingsBalance.toLocaleString();
+        document.getElementById('sav-val-clk').innerText = '￥' + savingsBalance.toLocaleString();
       }
     }
 
     function initUserSelect() {
       const select = document.getElementById('s-user');
-      const current = select.value;
+      const cur = select.value;
       select.innerHTML = '';
-      users.forEach(u => {
-        select.innerHTML += `<option value="${u}">${u}</option>`;
-      });
-      if(users.includes(current)) select.value = current;
+      users.forEach(u => select.innerHTML += `<option value="${u}">${u}</option>`);
+      if (users.includes(cur)) select.value = cur;
+    }
+
+    function switchRole() {
+      const r = document.getElementById('role-select').value;
+      const tabSup = document.getElementById('tab-sup');
+      const tabBuy = document.getElementById('tab-buy');
+      const tabClk = document.getElementById('tab-clk');
+
+      if (r === 'supplier') {
+        tabSup.style.display = 'block'; tabBuy.style.display = 'none'; tabClk.style.display = 'none';
+        showView('sup');
+      } else if (r === 'buyer') {
+        tabSup.style.display = 'none'; tabBuy.style.display = 'block'; tabClk.style.display = 'none';
+        showView('buy');
+      } else if (r === 'clerk') {
+        tabSup.style.display = 'none'; tabBuy.style.display = 'none'; tabClk.style.display = 'block';
+        showView('clk');
+      } else {
+        tabSup.style.display = 'block'; tabBuy.style.display = 'block'; tabClk.style.display = 'block';
+        showView('sup');
+      }
     }
 
     function showView(v) {
       document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (v==='sup'&&i===0)||(v==='buy'&&i===1)||(v==='clk'&&i===2)));
       document.querySelectorAll('.view').forEach(e => e.classList.remove('active'));
       document.getElementById('v-' + v).classList.add('active');
-      if(v==='sup') renderSup();
-      if(v==='buy') renderBuy();
-      if(v==='clk') renderClk();
     }
 
-    // --- モーダル・確認画面関連 ---
+    // モーダル・確認画面
     function openConfirmModal() {
       const name = document.getElementById('p-name').value;
       const price = parseInt(document.getElementById('p-price').value) || 0;
-      if(!name || !price) return alert('商品名と提案単価は必須です。');
-
-      const user = document.getElementById('s-user').value;
-      const spec = document.getElementById('p-spec').value || '未設定';
-      const qty = document.getElementById('p-qty').value || '未設定';
+      if (!name || !price) return alert('商品名と提案単価は必須です');
 
       document.getElementById('confirm-content').innerHTML = `
-        <div class="confirm-row"><span>担当者:</span><strong>${user}</strong></div>
+        <div class="confirm-row"><span>担当者:</span><strong>${document.getElementById('s-user').value}</strong></div>
         <div class="confirm-row"><span>商品名:</span><strong>${name}</strong></div>
-        <div class="confirm-row"><span>産地/規格:</span><span>${spec}</span></div>
-        <div class="confirm-row"><span>提案単価:</span><strong style="color:var(--s); font-size:15px;">￥${price.toLocaleString()}</strong></div>
-        <div class="confirm-row"><span>限定数量:</span><span>${qty}</span></div>
+        <div class="confirm-row"><span>規格:</span><span>${document.getElementById('p-spec').value || '未設定'}</span></div>
+        <div class="confirm-row"><span>提案単価:</span><strong style="color:var(--s);">￥${price.toLocaleString()}</strong></div>
+        <div class="confirm-row"><span>数量:</span><span>${document.getElementById('p-qty').value || '未設定'}</span></div>
       `;
       document.getElementById('modal-confirm').classList.add('active');
     }
@@ -205,59 +273,46 @@
       document.getElementById('modal-confirm').classList.remove('active');
     }
 
-    function submitProposal() {
+    async function submitProposal() {
       const editId = document.getElementById('editing-id').value;
-      const user = document.getElementById('s-user').value;
-      const name = document.getElementById('p-name').value;
-      const spec = document.getElementById('p-spec').value;
-      const price = parseInt(document.getElementById('p-price').value) || 0;
-      const qty = document.getElementById('p-qty').value;
+      const payload = {
+        user_name: document.getElementById('s-user').value,
+        product_name: document.getElementById('p-name').value,
+        spec: document.getElementById('p-spec').value,
+        proposed_price: parseInt(document.getElementById('p-price').value) || 0,
+        limited_quantity: document.getElementById('p-qty').value,
+        status: 'pending'
+      };
 
-      if(editId) {
-        const target = list.find(x => x.id === editId);
-        if(target) {
-          target.user = user;
-          target.name = name;
-          target.spec = spec;
-          target.price = price;
-          target.qty = qty;
-        }
+      if (editId) {
+        await _supabase.from('proposals').update(payload).eq('id', editId);
       } else {
-        list.unshift({
-          id: Date.now().toString(),
-          user, name, spec, price, qty,
-          status: 'wait', finalPrice: 0, diff: 0, done: false
-        });
+        await _supabase.from('proposals').insert(payload);
       }
 
-      save();
       closeConfirmModal();
       resetForm();
-      renderSup();
-      alert('提案を送信しました！');
+      await fetchProposals();
+      alert('提案をクラウドへ送信しました！');
     }
 
     function editProposal(id) {
-      const target = list.find(x => x.id === id);
-      if(!target) return;
-
-      document.getElementById('editing-id').value = target.id;
-      document.getElementById('s-user').value = target.user;
-      document.getElementById('p-name').value = target.name;
-      document.getElementById('p-spec').value = target.spec;
-      document.getElementById('p-price').value = target.price;
-      document.getElementById('p-qty').value = target.qty;
-
+      const p = proposals.find(x => x.id === id);
+      if (!p) return;
+      document.getElementById('editing-id').value = p.id;
+      document.getElementById('s-user').value = p.user_name;
+      document.getElementById('p-name').value = p.product_name;
+      document.getElementById('p-spec').value = p.spec;
+      document.getElementById('p-price').value = p.proposed_price;
+      document.getElementById('p-qty').value = p.limited_quantity;
       document.getElementById('form-title').innerText = '提案の編集';
       document.getElementById('cancel-edit-btn').style.display = 'block';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function deleteProposal(id) {
-      if(confirm('この提案を削除してもよろしいですか？')) {
-        list = list.filter(x => x.id !== id);
-        save();
-        renderSup();
+    async function deleteProposal(id) {
+      if (confirm('削除してもよろしいですか？')) {
+        await _supabase.from('proposals').delete().eq('id', id);
+        await fetchProposals();
       }
     }
 
@@ -271,115 +326,82 @@
       document.getElementById('cancel-edit-btn').style.display = 'none';
     }
 
-    // --- 担当者管理関連 ---
-    function openUserManageModal() {
-      renderUserManageList();
-      document.getElementById('modal-user').classList.add('active');
-    }
+    // 判定（バイヤー）
+    async function judge(id, type) {
+      const p = proposals.find(x => x.id === id);
+      const df = parseInt(document.getElementById(`df-${id}`)?.value) || 0;
+      let status = 'approved';
+      let finalPrice = p.proposed_price;
+      let diff = 0;
 
-    function closeUserManageModal() {
-      document.getElementById('modal-user').classList.remove('active');
-      initUserSelect();
-      renderSup();
-    }
-
-    function renderUserManageList() {
-      const container = document.getElementById('user-manage-list');
-      container.innerHTML = '';
-      users.forEach((u, idx) => {
-        container.innerHTML += `
-          <div style="display:flex; gap:4px; margin-bottom:4px;">
-            <input type="text" value="${u}" onchange="updateUserName(${idx}, this.value)">
-            <button class="btn btn-ng btn-sm" style="width:50px; margin:0;" onclick="deleteUser(${idx})">削除</button>
-          </div>
-        `;
-      });
-    }
-
-    function updateUserName(idx, newName) {
-      if(!newName.trim()) return;
-      const oldName = users[idx];
-      users[idx] = newName.trim();
-      list.forEach(p => { if(p.user === oldName) p.user = newName.trim(); });
-      save();
-    }
-
-    function addUser() {
-      const input = document.getElementById('new-user-name');
-      const val = input.value.trim();
-      if(!val) return;
-      if(users.includes(val)) return alert('すでに存在する名前です');
-      users.push(val);
-      input.value = '';
-      save();
-      renderUserManageList();
-    }
-
-    function deleteUser(idx) {
-      if(users.length <= 1) return alert('担当者は最低1人必要です');
-      if(confirm(`${users[idx]} を削除しますか？`)) {
-        users.splice(idx, 1);
-        save();
-        renderUserManageList();
+      if (type === 'ng') {
+        status = 'rejected';
+      } else if (type === 'add') {
+        if (df <= 0) return alert('金額を入力してください');
+        finalPrice = p.proposed_price + df;
+        diff = df;
+        savingsBalance += df;
+      } else if (type === 'sub') {
+        if (df <= 0 || df > savingsBalance) return alert('残高を確認してください');
+        finalPrice = p.proposed_price - df;
+        diff = -df;
+        savingsBalance -= df;
       }
+
+      await _supabase.from('proposals').update({ status, final_price: finalPrice, savings_diff: diff }).eq('id', id);
+      await _supabase.from('savings_bank').update({ balance: savingsBalance }).eq('id', 1);
+      await fetchProposals();
+      await fetchSavings();
     }
 
-    // --- 画面描画 ---
+    // 事務員 残高更新
+    async function updateSavingsManual() {
+      const val = parseInt(document.getElementById('manual-savings-input').value);
+      if (isNaN(val)) return alert('正しい金額を入力してください');
+      await _supabase.from('savings_bank').update({ balance: val }).eq('id', 1);
+      document.getElementById('manual-savings-input').value = '';
+      await fetchSavings();
+      alert('貯金残高を更新しました');
+    }
+
+    async function toggleDone(id, currentDone) {
+      await _supabase.from('proposals').update({ is_transferred: !currentDone }).eq('id', id);
+      await fetchProposals();
+    }
+
+    // 描画処理
     function renderSup() {
-      initUserSelect();
       const u = document.getElementById('s-user').value;
       const el = document.getElementById('sup-list');
+      const list = proposals.filter(p => p.user_name === u);
+      if (!list.length) return el.innerHTML = '<div style="font-size:12px;color:#888;">提案履歴はありません</div>';
+
       el.innerHTML = '';
-
-      const myProposals = list.filter(p => p.user === u);
-      if(!myProposals.length) {
-        el.innerHTML = '<div style="font-size:12px;color:#888;">この担当者の提案履歴はありません</div>';
-        return;
-      }
-
-      myProposals.forEach(p => {
+      list.forEach(p => {
         let b = '<span class="badge bg-wait">判定待ち</span>';
-        let actionBtns = '';
-
-        if(p.status==='wait') {
-          actionBtns = `
-            <div style="margin-top:6px; text-align:right;">
-              <button class="btn btn-s btn-sm" onclick="editProposal('${p.id}')">編集</button>
-              <button class="btn btn-ng btn-sm" onclick="deleteProposal('${p.id}')">削除</button>
-            </div>
-          `;
-        } else if(p.status==='ok') {
-          b = `<span class="badge bg-ok">確定(￥${p.finalPrice.toLocaleString()})</span>`;
-        } else if(p.status==='ng') {
+        let act = '';
+        if (p.status === 'pending') {
+          act = `<div style="text-align:right; margin-top:4px;"><button class="btn btn-s btn-sm" onclick="editProposal('${p.id}')">編集</button> <button class="btn btn-ng btn-sm" onclick="deleteProposal('${p.id}')">削除</button></div>`;
+        } else if (p.status === 'approved') {
+          b = `<span class="badge bg-ok">確定(￥${p.final_price.toLocaleString()})</span>`;
+        } else {
           b = '<span class="badge bg-ng">NG</span>';
         }
-
-        el.innerHTML += `
-          <div class="item-card">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>${p.name}</strong>${b}
-            </div>
-            <div style="font-size:11px; color:#666; margin-top:2px;">
-              ${p.spec} | ￥${p.price.toLocaleString()} (${p.qty})
-            </div>
-            ${actionBtns}
-          </div>
-        `;
+        el.innerHTML += `<div class="item-card"><div style="display:flex;justify-content:space-between;"><strong>${p.product_name}</strong>${b}</div><div style="font-size:11px;color:#666;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div>${act}</div>`;
       });
     }
 
     function renderBuy() {
-      document.getElementById('sav-val').innerText = '￥' + savings.toLocaleString();
       const el = document.getElementById('buy-list');
+      const waits = proposals.filter(p => p.status === 'pending');
+      if (!waits.length) return el.innerHTML = '<div style="font-size:12px;color:#888;text-align:center;">未判定の提案はありません</div>';
+
       el.innerHTML = '';
-      const waits = list.filter(p => p.status === 'wait');
-      if(!waits.length) return el.innerHTML = '<div style="font-size:12px;color:#888;text-align:center;">未判定の提案はありません</div>';
-      
       waits.forEach(p => {
         el.innerHTML += `<div class="item-card">
-          <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.user} の提案</div>
-          <strong>${p.name}</strong> (${p.spec})
-          <div style="font-size:12px;">提案単価: <strong>￥${p.price.toLocaleString()}</strong> / ${p.qty}</div>
+          <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.user_name} の提案</div>
+          <strong>${p.product_name}</strong> (${p.spec || '規格なし'})
+          <div style="font-size:12px;">提案単価: <strong>￥${p.proposed_price.toLocaleString()}</strong> / ${p.limited_quantity || ''}</div>
           <div class="act-btns">
             <button class="btn btn-ok" style="margin:0;" onclick="judge('${p.id}','ok')">そのままOK</button>
             <button class="btn btn-ng" style="margin:0;" onclick="judge('${p.id}','ng')">NG</button>
@@ -393,44 +415,35 @@
       });
     }
 
-    function judge(id, type) {
-      const p = list.find(x => x.id === id);
-      const df = parseInt(document.getElementById(`df-${id}`)?.value) || 0;
-      if(type === 'ok') { p.status = 'ok'; p.finalPrice = p.price; }
-      else if(type === 'ng') { p.status = 'ng'; }
-      else if(type === 'add') {
-        if(df <= 0) return alert('金額を入力してください');
-        p.status = 'ok'; p.finalPrice = p.price + df; p.diff = df; savings += df;
-      } else if(type === 'sub') {
-        if(df <= 0 || df > savings) return alert('貯金残高を確認してください');
-        p.status = 'ok'; p.finalPrice = p.price - df; p.diff = -df; savings -= df;
-      }
-      save(); renderBuy();
-    }
-
     function renderClk() {
       const el = document.getElementById('clk-list');
+      const oks = proposals.filter(p => p.status === 'approved');
+      if (!oks.length) return el.innerHTML = '<tr><td colspan="5" style="text-align:center;">確定データはありません</td></tr>';
+
       el.innerHTML = '';
-      const oks = list.filter(p => p.status === 'ok');
-      if(!oks.length) return el.innerHTML = '<tr><td colspan="5" style="text-align:center;">確定データはありません</td></tr>';
       oks.forEach(p => {
-        el.innerHTML += `<tr class="${p.done ? 'done' : ''}">
-          <td style="text-align:center;"><input type="checkbox" ${p.done?'checked':''} onchange="toggleDone('${p.id}')"></td>
-          <td>${p.user}</td>
-          <td><strong>${p.name}</strong><br><span style="font-size:9px;color:#666;">${p.spec}</span></td>
-          <td>￥${p.finalPrice.toLocaleString()}</td>
-          <td>${p.diff > 0 ? '+￥'+p.diff : (p.diff < 0 ? '-￥'+Math.abs(p.diff) : '0')}</td>
+        el.innerHTML += `<tr class="${p.is_transferred ? 'done' : ''}">
+          <td style="text-align:center;"><input type="checkbox" ${p.is_transferred ? 'checked' : ''} onchange="toggleDone('${p.id}', ${p.is_transferred})"></td>
+          <td>${p.user_name}</td>
+          <td><strong>${p.product_name}</strong><br><span style="font-size:9px;color:#666;">${p.spec||''}</span></td>
+          <td>￥${p.final_price.toLocaleString()}</td>
+          <td>${p.savings_diff > 0 ? '+￥'+p.savings_diff : (p.savings_diff < 0 ? '-￥'+Math.abs(p.savings_diff) : '0')}</td>
         </tr>`;
       });
     }
 
-    function toggleDone(id) {
-      const p = list.find(x => x.id === id);
-      if(p) { p.done = !p.done; save(); renderClk(); }
+    function openUserModal() { document.getElementById('modal-user').classList.add('active'); }
+    function closeUserModal() { document.getElementById('modal-user').classList.remove('active'); }
+    async function addUser() {
+      const val = document.getElementById('new-user-name').value.trim();
+      if (!val) return;
+      await _supabase.from('users').insert({ name: val, role: 'supplier' });
+      document.getElementById('new-user-name').value = '';
+      await fetchUsers();
     }
 
-    initUserSelect();
-    renderSup();
+    // アプリ起動
+    init();
   </script>
 </body>
 </html>
