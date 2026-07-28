@@ -207,14 +207,15 @@
       showLoginScreen();
     }
 
-    // LINE一斉送信関数
+    // LINE送信関数（CORS回避プロキシ経由）
     async function sendLineNotification(count, staffName) {
       if (!LINE_CHANNEL_TOKEN) return;
       
       const messageText = `【価格提案システム】\n三澤商事（${staffName || '担当者'}）より、本日分の提案が ${count} 件バイヤー画面に届きました！\n確認をお願いいたします。`;
 
       try {
-        await fetch('https://api.line.me/v2/bot/message/broadcast', {
+        // CORS回避のレスポンス転送プロキシを利用
+        const response = await fetch('https://corsproxy.io/?' + encodeURIComponent('https://api.line.me/v2/bot/message/broadcast'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -224,8 +225,13 @@
             messages: [{ type: 'text', text: messageText }]
           })
         });
+
+        const resData = await response.json();
+        if (!response.ok) {
+          alert('【LINE送信エラー】\n' + JSON.stringify(resData));
+        }
       } catch(e) {
-        console.error('LINE送信エラー:', e);
+        alert('【通信エラー】LINE送信に失敗しました:\n' + e.message);
       }
     }
 
@@ -354,7 +360,7 @@
     }
 
     async function fetchProposals() {
-      const { data, error } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
+      const { data } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
       if (data) proposals = data;
       renderSup(); renderBuy(); renderClk();
     }
@@ -439,7 +445,7 @@
         await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
         await fetchProposals();
         await sendLineNotification(drafts.length, staffName);
-        alert('バイヤーへ送信完了しました！');
+        alert('バイヤーへ送信処理を完了しました！');
       }
     }
 
