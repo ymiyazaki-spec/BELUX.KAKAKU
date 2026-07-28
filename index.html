@@ -16,8 +16,6 @@
     .user-bar { background: var(--p); color: #fff; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
     .logout-btn { background: #e74c3c; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
-    .sound-btn { background: #f39c12; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 6px; }
-
     .tabs { display: flex; gap: 4px; margin-bottom: 12px; background: #ddd; padding: 3px; border-radius: 8px; }
     .tab { flex: 1; padding: 8px 2px; text-align: center; font-size: 12px; font-weight: bold; background: none; border: none; border-radius: 6px; cursor: pointer; }
     .tab.active { background: #fff; color: var(--p); }
@@ -32,11 +30,19 @@
     .btn-ng { background: var(--ng); color: #fff; }
     .btn-sub { background: #7f8c8d; color: #fff; }
     .btn-sm { width: auto; padding: 3px 8px; font-size: 11px; margin-top: 0; }
+    
     .item-card { border: 1px solid #eee; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff; position: relative; }
     .badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 10px; color: #fff; font-weight: bold; }
     .bg-ok { background: var(--ok); }
     .bg-ng { background: var(--ng); }
     .bg-wait { background: #f39c12; }
+    
+    .draft-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+    .draft-table th, .draft-table td { border: 1px solid #ddd; padding: 6px 4px; text-align: left; }
+    .draft-table th { background: #f8f9fa; }
+
+    .timer-box { background: #eef7fc; border: 1px solid var(--s); border-radius: 6px; padding: 8px; margin-bottom: 12px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+
     .sav-box { background: #eef9f1; border: 1px solid var(--ok); border-radius: 6px; padding: 8px; text-align: center; margin-bottom: 12px; font-size: 12px; }
     .sav-val { font-size: 18px; font-weight: bold; color: var(--ok); }
     .act-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; }
@@ -47,11 +53,6 @@
     .done { background: #e8f8f5; color: #888; text-decoration: line-through; }
     .view { display: none; }
     .view.active { display: block; }
-    
-    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
-    .modal-overlay.active { display: flex; }
-    .modal-box { background: #fff; border-radius: 8px; padding: 16px; width: 90%; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-    .confirm-row { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding: 6px 0; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -73,10 +74,7 @@
 
     <div class="user-bar">
       <div>👤 <strong id="user-display-name">---</strong> (<span id="user-role-name">---</span>)</div>
-      <div>
-        <button id="sound-toggle-btn" class="sound-btn" onclick="enableAudio()">🔔 通知音ON</button>
-        <button class="logout-btn" onclick="handleLogout()">ログアウト</button>
-      </div>
+      <button class="logout-btn" onclick="handleLogout()">ログアウト</button>
     </div>
 
     <div class="tabs" id="tab-bar">
@@ -85,26 +83,48 @@
       <button class="tab" id="tab-clk" onclick="showView('clk')">③ 事務員確認</button>
     </div>
 
-    <!-- 画面①：仲卸 -->
+    <!-- 画面①：仲卸（営業） -->
     <div id="v-sup" class="view">
+      <div class="timer-box">
+        <div>⏰ バイヤーへの一括公開時刻: <strong id="timer-display-time">15:00</strong></div>
+        <span style="font-size:10px; color:#666;">（時間になると自動で全提案が一括届きます）</span>
+      </div>
+
       <div class="card">
-        <div class="card-title"><span id="form-title">新規提案入力</span></div>
-        <input type="hidden" id="editing-id" value="">
-        <label>営業担当者名（例: 山田）</label>
-        <input type="text" id="s-user-name" placeholder="例: 山田">
-        <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
+        <div class="card-title">📝 提案品目の入力（一時保存）</div>
         <div class="grid">
-          <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
-          <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
+          <div>
+            <label>営業担当者名</label>
+            <input type="text" id="s-user-name" placeholder="例: 山田">
+          </div>
+          <div>
+            <label>納品/売り込み対象日</label>
+            <input type="date" id="p-target-date">
+          </div>
         </div>
-        <label>限定数量</label><input type="text" id="p-qty" placeholder="例: 50ケース">
-        <div style="display:flex; gap:6px;">
-          <button class="btn btn-s" onclick="openConfirmModal()">確認画面へ進む</button>
-          <button id="cancel-edit-btn" class="btn btn-sub" style="display:none;" onclick="resetForm()">キャンセル</button>
+
+        <div style="background:#f8f9fa; padding:8px; border-radius:6px; border:1px solid #e0e0e0; margin-top:8px;">
+          <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
+          <div class="grid">
+            <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
+            <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
+          </div>
+          <label>限定数量</label><input type="text" id="p-qty" placeholder="例: 50ケース">
+          <button class="btn btn-s" style="margin-top:8px; background:var(--p);" onclick="addProposalDraft()">下書きリストに追加</button>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div style="font-size:12px; font-weight:bold;">未送信の下書きリスト（公開前）</div>
+          <table class="draft-table">
+            <thead><tr><th>対象日</th><th>商品名</th><th>規格</th><th>単価</th><th>削除</th></tr></thead>
+            <tbody id="draft-list-body"></tbody>
+          </table>
+          <button class="btn btn-ok" style="margin-top:10px;" onclick="publishNowManual()">今すぐバイヤーへ手動送信する</button>
         </div>
       </div>
+
       <div class="card">
-        <div class="card-title">すべての提案履歴</div>
+        <div class="card-title">送信済み（公開済み）の提案履歴</div>
         <div id="sup-list">データ読み込み中...</div>
       </div>
     </div>
@@ -132,72 +152,39 @@
           <button class="btn btn-ok btn-sm" style="width:80px; margin:0;" onclick="updateSavingsManual()">残高更新</button>
         </div>
       </div>
+
       <div class="card">
-        <div class="card-title">確定データ一覧（転記用）</div>
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>確定データ一覧（転記用）</span>
+          <button class="btn btn-ng btn-sm" onclick="archiveTodayData()">本日分を完了して画面クリア</button>
+        </div>
         <table>
-          <thead><tr><th>転記</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>単価差額</th></tr></thead>
+          <thead><tr><th>転記</th><th>対象日</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>単価差額</th></tr></thead>
           <tbody id="clk-list"></tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- モーダル：確認画面 -->
-  <div id="modal-confirm" class="modal-overlay">
-    <div class="modal-box">
-      <h3 style="margin-top:0; font-size:15px; border-bottom:2px solid var(--s); padding-bottom:6px;">提案内容の確認</h3>
-      <div id="confirm-content"></div>
-      <div style="display:flex; gap:8px; margin-top:12px;">
-        <button class="btn btn-sub" onclick="closeConfirmModal()">修正する</button>
-        <button class="btn btn-ok" onclick="submitProposal()">確定して送信</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4NTE5MzAwOSwiZXhwIjoyMTAwNzY5MDA5fQ.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentUser = null;
     let currentProfile = null;
     let proposals = [];
     let savingsBalance = 0;
-    let audioCtx = null;
-
-    function playNotificationSound() {
-      try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.15);
-
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.3);
-
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-      } catch (e) { console.log('Audio notification error:', e); }
-    }
-
-    function enableAudio() {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      audioCtx.resume();
-      playNotificationSound();
-      document.getElementById('sound-toggle-btn').innerText = '🔔 通知音有効';
-      document.getElementById('sound-toggle-btn').style.background = '#27ae60';
-    }
+    
+    // バイヤーへの一括公開設定時刻 (デフォルト: 15:00)
+    const PUBLISH_HOUR = 15;
+    const PUBLISH_MINUTE = 0;
 
     async function init() {
-      // 古いキャッシュセッションによるクラッシュを防止
+      // 本日の日付を自動セット
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('p-target-date').value = today;
+
       try {
         const { data: { session } } = await _supabase.auth.getSession();
         if (session && session.user) {
@@ -205,9 +192,7 @@
           await loadUserProfile();
           return;
         }
-      } catch(e) {
-        console.log('Session fetch bypassed:', e);
-      }
+      } catch(e){}
       showLoginScreen();
     }
 
@@ -284,13 +269,14 @@
       await fetchProposals();
       await fetchSavings();
 
-      // ポーリング型自動更新（3秒ごとに最新データを取得してリアルタイム反映）
+      // 定期実行チェック（自動送信タイマー ＆ データ更新）
       setInterval(() => {
         if (currentUser) {
-          fetchProposals(true);
+          checkAutoPublishTimer();
+          fetchProposals();
           fetchSavings();
         }
-      }, 3000);
+      }, 5000);
     }
 
     function setupViewByRole(role) {
@@ -328,17 +314,9 @@
       document.getElementById('v-' + v).classList.add('active');
     }
 
-    let lastProposalCount = -1;
-    async function fetchProposals(isBackground = false) {
+    async function fetchProposals() {
       const { data } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
-      if (data) {
-        // バックグラウンド取得時に件数や内容に変更があれば通知音を鳴らす
-        if (isBackground && lastProposalCount !== -1 && JSON.stringify(data) !== JSON.stringify(proposals)) {
-          playNotificationSound();
-        }
-        proposals = data;
-        lastProposalCount = data.length;
-      }
+      if (data) proposals = data;
       renderSup(); renderBuy(); renderClk();
     }
 
@@ -351,64 +329,70 @@
       }
     }
 
-    function openConfirmModal() {
-      const staffName = document.getElementById('s-user-name').value.trim();
-      const name = document.getElementById('p-name').value;
-      const price = parseInt(document.getElementById('p-price').value) || 0;
-      
-      if (!staffName) return alert('営業担当者名を入力してください（例: 山田）');
-      if (!name || !price) return alert('商品名と提案単価は必須です');
-
-      const fullStaffName = staffName.includes('三沢') ? staffName : `三沢（${staffName}）`;
-
-      document.getElementById('confirm-content').innerHTML = `
-        <div class="confirm-row"><span>担当者:</span><strong>${fullStaffName}</strong></div>
-        <div class="confirm-row"><span>商品名:</span><strong>${name}</strong></div>
-        <div class="confirm-row"><span>規格:</span><span>${document.getElementById('p-spec').value || '未設定'}</span></div>
-        <div class="confirm-row"><span>提案単価:</span><strong style="color:var(--s);">￥${price.toLocaleString()}</strong></div>
-        <div class="confirm-row"><span>数量:</span><span>${document.getElementById('p-qty').value || '未設定'}</span></div>
-      `;
-      document.getElementById('modal-confirm').classList.add('active');
-    }
-
-    function closeConfirmModal() { document.getElementById('modal-confirm').classList.remove('active'); }
-
-    async function submitProposal() {
-      const editId = document.getElementById('editing-id').value;
+    // 下書き（一時保存）を追加
+    async function addProposalDraft() {
       const rawStaffName = document.getElementById('s-user-name').value.trim();
-      const fullStaffName = rawStaffName.includes('三沢') ? rawStaffName : `三沢（${rawStaffName}）`;
+      const targetDate = document.getElementById('p-target-date').value;
+      const name = document.getElementById('p-name').value.trim();
+      const price = parseInt(document.getElementById('p-price').value) || 0;
+      const spec = document.getElementById('p-spec').value.trim();
+      const qty = document.getElementById('p-qty').value.trim();
 
+      if (!rawStaffName) return alert('営業担当者名を入力してください');
+      if (!name || price <= 0) return alert('商品名と単価を入力してください');
+
+      const fullStaffName = rawStaffName.includes('三沢') ? rawStaffName : `三沢（${rawStaffName}）`;
       localStorage.setItem('last_staff_name', rawStaffName);
 
       const payload = {
         user_name: fullStaffName,
-        product_name: document.getElementById('p-name').value,
-        spec: document.getElementById('p-spec').value,
-        proposed_price: parseInt(document.getElementById('p-price').value) || 0,
-        limited_quantity: document.getElementById('p-qty').value,
-        status: 'pending'
+        product_name: name,
+        spec: spec,
+        proposed_price: price,
+        limited_quantity: qty,
+        target_date: targetDate,
+        status: 'draft', // まだバイヤーには見えない「下書き」
+        is_archived: false
       };
 
-      if (editId) {
-        await _supabase.from('proposals').update(payload).eq('id', editId);
-      } else {
-        await _supabase.from('proposals').insert(payload);
-      }
+      await _supabase.from('proposals').insert(payload);
 
-      closeConfirmModal();
-      resetForm();
-      await fetchProposals();
-      alert('提案をクラウドへ送信しました！');
-    }
-
-    function resetForm() {
-      document.getElementById('editing-id').value = '';
       document.getElementById('p-name').value = '';
       document.getElementById('p-spec').value = '';
       document.getElementById('p-price').value = '';
       document.getElementById('p-qty').value = '';
-      document.getElementById('form-title').innerText = '新規提案入力';
-      document.getElementById('cancel-edit-btn').style.display = 'none';
+      document.getElementById('p-name').focus();
+
+      await fetchProposals();
+    }
+
+    async function deleteDraft(id) {
+      await _supabase.from('proposals').delete().eq('id', id);
+      await fetchProposals();
+    }
+
+    // 指定時間での自動一括送信チェック
+    async function checkAutoPublishTimer() {
+      const now = new Date();
+      if (now.getHours() === PUBLISH_HOUR && now.getMinutes() === PUBLISH_MINUTE) {
+        const drafts = proposals.filter(p => p.status === 'draft');
+        if (drafts.length > 0) {
+          await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
+          await fetchProposals();
+        }
+      }
+    }
+
+    // 手動で今すぐバイヤーへ一括送信
+    async function publishNowManual() {
+      const drafts = proposals.filter(p => p.status === 'draft');
+      if (!drafts.length) return alert('下書きリストに品目がありません');
+
+      if (confirm(`下書きにある ${drafts.length} 件の提案を今すぐバイヤーへ送信しますか？`)) {
+        await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
+        await fetchProposals();
+        alert('バイヤーへ送信完了しました！');
+      }
     }
 
     async function judge(id, type) {
@@ -445,18 +429,46 @@
       await fetchProposals();
     }
 
+    // 事務員画面の「本日分クリア（アーカイブ）」
+    async function archiveTodayData() {
+      if (confirm('処理済みの提案データを画面から非表示（クリア）にしますか？\n（過去データは記録として保持されます）')) {
+        await _supabase.from('proposals').update({ is_archived: true }).eq('status', 'approved');
+        await fetchProposals();
+        alert('画面をクリアしました');
+      }
+    }
+
     function renderSup() {
+      const draftTbody = document.getElementById('draft-list-body');
+      const drafts = proposals.filter(p => p.status === 'draft');
+      
+      if (!drafts.length) {
+        draftTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">下書きはありません</td></tr>';
+      } else {
+        draftTbody.innerHTML = '';
+        drafts.forEach(p => {
+          draftTbody.innerHTML += `<tr>
+            <td>${p.target_date ? p.target_date.slice(5) : '-'}</td>
+            <td><strong>${p.product_name}</strong></td>
+            <td>${p.spec || '-'}</td>
+            <td>￥${p.proposed_price.toLocaleString()}</td>
+            <td style="text-align:center;"><button class="btn btn-ng btn-sm" style="padding:1px 5px;" onclick="deleteDraft('${p.id}')">✕</button></td>
+          </tr>`;
+        });
+      }
+
       const el = document.getElementById('sup-list');
-      if (!proposals.length) return el.innerHTML = '<div style="font-size:12px;color:#888;">提案履歴はありません</div>';
+      const published = proposals.filter(p => p.status !== 'draft');
+      if (!published.length) return el.innerHTML = '<div style="font-size:12px;color:#888;">送信済みの提案はありません</div>';
 
       el.innerHTML = '';
-      proposals.forEach(p => {
+      published.forEach(p => {
         let b = '<span class="badge bg-wait">判定待ち</span>';
         if (p.status === 'approved') b = `<span class="badge bg-ok">確定(￥${p.final_price.toLocaleString()})</span>`;
         else if (p.status === 'rejected') b = '<span class="badge bg-ng">NG</span>';
         
         el.innerHTML += `<div class="item-card">
-          <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.user_name}</div>
+          <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.target_date || ''} | ${p.user_name}</div>
           <div style="display:flex;justify-content:space-between;margin-top:2px;"><strong>${p.product_name}</strong>${b}</div>
           <div style="font-size:11px;color:#666;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div>
         </div>`;
@@ -471,7 +483,7 @@
       el.innerHTML = '';
       waits.forEach(p => {
         el.innerHTML += `<div class="item-card">
-          <div style="font-size:11px;color:var(--s);font-weight:bold;">提案者: ${p.user_name}</div>
+          <div style="font-size:11px;color:var(--s);font-weight:bold;">【対象日: ${p.target_date || '未設定'}】 担当: ${p.user_name}</div>
           <strong style="font-size:14px;">${p.product_name}</strong> (${p.spec || '規格なし'})
           <div style="font-size:12px;margin:2px 0;">提案単価: <strong>￥${p.proposed_price.toLocaleString()}</strong> / ${p.limited_quantity || ''}</div>
           <div class="act-btns">
@@ -489,13 +501,15 @@
 
     function renderClk() {
       const el = document.getElementById('clk-list');
-      const oks = proposals.filter(p => p.status === 'approved');
-      if (!oks.length) return el.innerHTML = '<tr><td colspan="5" style="text-align:center;">確定データはありません</td></tr>';
+      // アーカイブ（画面クリア）されていない確定データのみ表示
+      const oks = proposals.filter(p => p.status === 'approved' && !p.is_archived);
+      if (!oks.length) return el.innerHTML = '<tr><td colspan="6" style="text-align:center;">確定データはありません</td></tr>';
 
       el.innerHTML = '';
       oks.forEach(p => {
         el.innerHTML += `<tr class="${p.is_transferred ? 'done' : ''}">
           <td style="text-align:center;"><input type="checkbox" ${p.is_transferred ? 'checked' : ''} onchange="toggleDone('${p.id}', '${p.is_transferred}')"></td>
+          <td>${p.target_date ? p.target_date.slice(5) : '-'}</td>
           <td>${p.user_name}</td>
           <td><strong>${p.product_name}</strong><br><span style="font-size:9px;color:#666;">${p.spec||''}</span></td>
           <td>￥${p.final_price ? p.final_price.toLocaleString() : 0}</td>
