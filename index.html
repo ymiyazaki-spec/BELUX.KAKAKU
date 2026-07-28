@@ -172,8 +172,15 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
+    // 修正版キー（最新発行キー）
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4NTE5MzAwOSwiZXhwIjoyMTAwNzY5MDA5fQ.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
-    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    let _supabase = null;
+    try {
+      _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch(e) {
+      console.error('Supabase init error:', e);
+    }
 
     let currentUser = null;
     let currentProfile = null;
@@ -337,7 +344,6 @@
       }
     }
 
-    // 下書き追加（エラー原因をダイレクト表示）
     async function addProposalDraft() {
       const rawStaffName = document.getElementById('s-user-name').value.trim();
       const targetDate = document.getElementById('p-target-date').value;
@@ -352,7 +358,6 @@
       const fullStaffName = rawStaffName.includes('三沢') ? rawStaffName : `三沢（${rawStaffName}）`;
       localStorage.setItem('last_staff_name', rawStaffName);
 
-      // 送信データ
       const payload = {
         user_name: fullStaffName,
         product_name: name,
@@ -364,18 +369,10 @@
         is_archived: false
       };
 
-      // 1回目の登録テスト
-      let res = await _supabase.from('proposals').insert(payload);
-      
-      // もしtarget_date列やis_archived列でエラーが出た場合の自動互換フォールバック
-      if (res.error && res.error.message.includes('column')) {
-        delete payload.target_date;
-        delete payload.is_archived;
-        res = await _supabase.from('proposals').insert(payload);
-      }
+      const { error } = await _supabase.from('proposals').insert(payload);
 
-      if (res.error) {
-        alert('【エラー詳細】\n' + res.error.message + '\n\nコード: ' + res.error.code);
+      if (error) {
+        alert('【追加エラー】\n' + error.message);
         return;
       }
 
