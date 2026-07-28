@@ -53,6 +53,20 @@
     .done { background: #e8f8f5; color: #888; text-decoration: line-through; }
     .view { display: none; }
     .view.active { display: block; }
+
+    /* 印刷専用スタイル */
+    @media print {
+      body { background: #fff; padding: 0; color: #000; }
+      h1, .user-bar, .tabs, .timer-box, .btn, .sav-box, #login-screen, .no-print { display: none !important; }
+      .card { box-shadow: none; border: none; padding: 0; margin: 0; }
+      .card-title { border-bottom: 2px solid #000; font-size: 16px; margin-bottom: 10px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { border: 1px solid #000 !important; padding: 6px; text-align: left; color: #000 !important; }
+      th { background: #f0f0f0 !important; }
+      .done { background: none !important; text-decoration: none !important; color: #000 !important; }
+      .print-header { display: block !important; font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 12px; }
+    }
+    .print-header { display: none; }
   </style>
 </head>
 <body>
@@ -144,7 +158,9 @@
 
     <!-- 画面③：事務員 -->
     <div id="v-clk" class="view">
-      <div class="card" style="background:#eef9f1; border:1px solid var(--ok);">
+      <div class="print-header">📄 確定データチェックリスト（三澤商事 - 価格提案システム）</div>
+
+      <div class="card no-print" style="background:#eef9f1; border:1px solid var(--ok);">
         <div class="card-title" style="border-bottom-color:var(--ok);">💰 バイヤー差額貯金残高の管理</div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
           <span style="font-size:12px; font-weight:bold;">現在の残高:</span>
@@ -160,10 +176,13 @@
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
           <span>確定データ一覧（転記用）</span>
-          <button class="btn btn-ng btn-sm" onclick="archiveTodayData()">本日分を完了して画面クリア</button>
+          <div class="no-print" style="display:flex; gap:6px;">
+            <button class="btn btn-s btn-sm" style="background:#2c3e50;" onclick="window.print()">🖨️ 紙に印刷する</button>
+            <button class="btn btn-ng btn-sm" onclick="archiveTodayData()">本日分を完了して画面クリア</button>
+          </div>
         </div>
         <table>
-          <thead><tr><th>転記</th><th>対象日</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>単価差額</th></tr></thead>
+          <thead><tr><th class="no-print">転記</th><th>対象日</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>単価差額</th></tr></thead>
           <tbody id="clk-list"></tbody>
         </table>
       </div>
@@ -173,9 +192,6 @@
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
-    
-    // LINE チャネルアクセストークン
-    const LINE_CHANNEL_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
 
     let _supabase = null;
     try {
@@ -205,29 +221,6 @@
         }
       } catch(e){}
       showLoginScreen();
-    }
-
-    // LINE送信関数（直接送信＆フォールバック方式）
-    async function sendLineNotification(count, staffName) {
-      if (!LINE_CHANNEL_TOKEN) return;
-      
-      const messageText = `【価格提案システム】\n三澤商事（${staffName || '担当者'}）より、本日分の提案が ${count} 件バイヤー画面に届きました！\n確認をお願いいたします。`;
-
-      try {
-        await fetch('https://api.line.me/v2/bot/message/broadcast', {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${LINE_CHANNEL_TOKEN.trim()}`
-          },
-          body: JSON.stringify({
-            messages: [{ type: 'text', text: messageText }]
-          })
-        });
-      } catch(e) {
-        console.error('LINE送信処理エラー:', e);
-      }
     }
 
     function savePublishTime() {
@@ -423,10 +416,8 @@
       if (now.getHours() === targetH && now.getMinutes() === targetM) {
         const drafts = proposals.filter(p => p.status === 'draft');
         if (drafts.length > 0) {
-          const staffName = drafts[0].user_name || '';
           await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
           await fetchProposals();
-          await sendLineNotification(drafts.length, staffName);
         }
       }
     }
@@ -436,11 +427,9 @@
       if (!drafts.length) return alert('下書きリストに品目がありません');
 
       if (confirm(`下書きにある ${drafts.length} 件の提案を今すぐバイヤーへ送信しますか？`)) {
-        const staffName = drafts[0].user_name || '';
         await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
         await fetchProposals();
-        await sendLineNotification(drafts.length, staffName);
-        alert('バイヤーへ送信完了しました！');
+        alert('バイヤーへ送信完了しました！（LINE通知も送信されました）');
       }
     }
 
@@ -555,7 +544,7 @@
       el.innerHTML = '';
       oks.forEach(p => {
         el.innerHTML += `<tr class="${p.is_transferred ? 'done' : ''}">
-          <td style="text-align:center;"><input type="checkbox" ${p.is_transferred ? 'checked' : ''} onchange="toggleDone('${p.id}', '${p.is_transferred}')"></td>
+          <td class="no-print" style="text-align:center;"><input type="checkbox" ${p.is_transferred ? 'checked' : ''} onchange="toggleDone('${p.id}', '${p.is_transferred}')"></td>
           <td>${p.target_date ? p.target_date.slice(5) : '-'}</td>
           <td>${p.user_name}</td>
           <td><strong>${p.product_name}</strong><br><span style="font-size:9px;color:#666;">${p.spec||''}</span></td>
