@@ -85,7 +85,6 @@
 
     <!-- 画面①：仲卸（営業） -->
     <div id="v-sup" class="view">
-      <!-- 送信時刻の設定ボックス -->
       <div class="timer-box">
         <div style="font-weight:bold; color:var(--p); margin-bottom:4px;">⏰ 一括送信時刻の設定</div>
         <div style="display:flex; gap:6px; align-items:center;">
@@ -182,11 +181,9 @@
     let savingsBalance = 0;
 
     async function init() {
-      // 本日の日付を自動セット
       const today = new Date().toISOString().split('T')[0];
       document.getElementById('p-target-date').value = today;
 
-      // 保存されている送信時間を復元（デフォルト: 15:00）
       const savedTime = localStorage.getItem('custom_publish_time') || '15:00';
       document.getElementById('publish-time-input').value = savedTime;
 
@@ -281,7 +278,6 @@
       await fetchProposals();
       await fetchSavings();
 
-      // 定期実行チェック（5秒ごとに時間チェック＆データ更新）
       setInterval(() => {
         if (currentUser) {
           checkAutoPublishTimer();
@@ -341,7 +337,6 @@
       }
     }
 
-    // 下書き（一時保存）を追加
     async function addProposalDraft() {
       const rawStaffName = document.getElementById('s-user-name').value.trim();
       const targetDate = document.getElementById('p-target-date').value;
@@ -367,7 +362,11 @@
         is_archived: false
       };
 
-      await _supabase.from('proposals').insert(payload);
+      const { error } = await _supabase.from('proposals').insert(payload);
+      if (error) {
+        alert('追加に失敗しました。Step 1のSQLが実行されているかご確認ください。');
+        return;
+      }
 
       document.getElementById('p-name').value = '';
       document.getElementById('p-spec').value = '';
@@ -379,11 +378,14 @@
     }
 
     async function deleteDraft(id) {
-      await _supabase.from('proposals').delete().eq('id', id);
-      await fetchProposals();
+      const { error } = await _supabase.from('proposals').delete().eq('id', id);
+      if (error) {
+        alert('削除エラー: ' + error.message);
+      } else {
+        await fetchProposals();
+      }
     }
 
-    // 設定時間になったかどうかの自動判定
     async function checkAutoPublishTimer() {
       const setTime = localStorage.getItem('custom_publish_time') || '15:00';
       const [targetH, targetM] = setTime.split(':').map(Number);
@@ -398,7 +400,6 @@
       }
     }
 
-    // 手動で今すぐバイヤーへ一括送信
     async function publishNowManual() {
       const drafts = proposals.filter(p => p.status === 'draft');
       if (!drafts.length) return alert('下書きリストに品目がありません');
