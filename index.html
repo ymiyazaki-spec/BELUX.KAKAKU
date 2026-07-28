@@ -337,6 +337,7 @@
       }
     }
 
+    // 下書き追加（エラー原因をダイレクト表示）
     async function addProposalDraft() {
       const rawStaffName = document.getElementById('s-user-name').value.trim();
       const targetDate = document.getElementById('p-target-date').value;
@@ -351,6 +352,7 @@
       const fullStaffName = rawStaffName.includes('三沢') ? rawStaffName : `三沢（${rawStaffName}）`;
       localStorage.setItem('last_staff_name', rawStaffName);
 
+      // 送信データ
       const payload = {
         user_name: fullStaffName,
         product_name: name,
@@ -362,9 +364,18 @@
         is_archived: false
       };
 
-      const { error } = await _supabase.from('proposals').insert(payload);
-      if (error) {
-        alert('追加に失敗しました。Step 1のSQLが実行されているかご確認ください：\n' + error.message);
+      // 1回目の登録テスト
+      let res = await _supabase.from('proposals').insert(payload);
+      
+      // もしtarget_date列やis_archived列でエラーが出た場合の自動互換フォールバック
+      if (res.error && res.error.message.includes('column')) {
+        delete payload.target_date;
+        delete payload.is_archived;
+        res = await _supabase.from('proposals').insert(payload);
+      }
+
+      if (res.error) {
+        alert('【エラー詳細】\n' + res.error.message + '\n\nコード: ' + res.error.code);
         return;
       }
 
