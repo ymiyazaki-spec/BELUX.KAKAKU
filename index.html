@@ -85,8 +85,8 @@
       <div class="card">
         <div class="card-title"><span id="form-title">新規提案入力</span></div>
         <input type="hidden" id="editing-id" value="">
-        <label>担当者名</label>
-        <input type="text" id="s-user-name" placeholder="例: 山田" readonly style="background:#f0f0f0;">
+        <label>営業担当者名（例: 山田）</label>
+        <input type="text" id="s-user-name" placeholder="例: 山田">
         <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
         <div class="grid">
           <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
@@ -99,7 +99,7 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-title">自分の提案履歴</div>
+        <div class="card-title">すべての提案履歴</div>
         <div id="sup-list">データ読み込み中...</div>
       </div>
     </div>
@@ -150,9 +150,8 @@
   </div>
 
   <script>
-    // Supabase接続情報（設定済み）
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MzY4OTIwOSwiZXhwIjoyMDY5MjY1MjA5fQ.L_eGkL1-43I3aO8Xj7p2w7E90GvSg7yB80R6I_qKx5g';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentUser = null;
@@ -187,11 +186,7 @@
         return;
       }
 
-      let email = rawId;
-      if (!rawId.includes('@')) {
-        email = `${rawId}@kakaku.internal`;
-      }
-
+      let email = rawId.includes('@') ? rawId : `${rawId}@kakaku.internal`;
       let { data, error } = await _supabase.auth.signInWithPassword({ email, password: pw });
       
       if (error && !rawId.includes('@')) {
@@ -226,7 +221,7 @@
         displayName = 'ベルクス様 (バイヤー)';
       } else if (email.startsWith('misawa')) {
         role = 'supplier';
-        displayName = '三沢商事 (担当)';
+        displayName = '三沢商事';
       } else if (email.startsWith('clerk')) {
         role = 'clerk';
         displayName = '事務担当';
@@ -238,7 +233,10 @@
       currentProfile = { role, display_name: displayName };
 
       document.getElementById('user-display-name').innerText = currentProfile.display_name;
-      document.getElementById('s-user-name').value = currentProfile.display_name;
+      
+      // 前回の担当者名が保存されていればそれを初期表示
+      const savedStaffName = localStorage.getItem('last_staff_name') || '';
+      document.getElementById('s-user-name').value = savedStaffName;
 
       const roleLabels = { supplier: '仲卸担当', buyer: 'バイヤー', clerk: '事務員', admin: '管理者' };
       document.getElementById('user-role-name').innerText = roleLabels[currentProfile.role] || '担当者';
@@ -302,12 +300,17 @@
     }
 
     function openConfirmModal() {
+      const staffName = document.getElementById('s-user-name').value.trim();
       const name = document.getElementById('p-name').value;
       const price = parseInt(document.getElementById('p-price').value) || 0;
+      
+      if (!staffName) return alert('営業担当者名を入力してください（例: 山田）');
       if (!name || !price) return alert('商品名と提案単価は必須です');
 
+      const fullStaffName = staffName.includes('三沢') ? staffName : `三沢（${staffName}）`;
+
       document.getElementById('confirm-content').innerHTML = `
-        <div class="confirm-row"><span>担当者:</span><strong>${currentProfile.display_name}</strong></div>
+        <div class="confirm-row"><span>担当者:</span><strong>${fullStaffName}</strong></div>
         <div class="confirm-row"><span>商品名:</span><strong>${name}</strong></div>
         <div class="confirm-row"><span>規格:</span><span>${document.getElementById('p-spec').value || '未設定'}</span></div>
         <div class="confirm-row"><span>提案単価:</span><strong style="color:var(--s);">￥${price.toLocaleString()}</strong></div>
@@ -320,8 +323,14 @@
 
     async function submitProposal() {
       const editId = document.getElementById('editing-id').value;
+      const rawStaffName = document.getElementById('s-user-name').value.trim();
+      const fullStaffName = rawStaffName.includes('三沢') ? rawStaffName : `三沢（${rawStaffName}）`;
+
+      // 担当者名をブラウザに保存（次回補完用）
+      localStorage.setItem('last_staff_name', rawStaffName);
+
       const payload = {
-        user_name: currentProfile.display_name,
+        user_name: fullStaffName,
         product_name: document.getElementById('p-name').value,
         spec: document.getElementById('p-spec').value,
         proposed_price: parseInt(document.getElementById('p-price').value) || 0,
@@ -387,16 +396,19 @@
 
     function renderSup() {
       const el = document.getElementById('sup-list');
-      const list = proposals.filter(p => p.user_name === currentProfile?.display_name);
-      if (!list.length) return el.innerHTML = '<div style="font-size:12px;color:#888;">提案履歴はありません</div>';
+      if (!proposals.length) return el.innerHTML = '<div style="font-size:12px;color:#888;">提案履歴はありません</div>';
 
       el.innerHTML = '';
-      list.forEach(p => {
+      proposals.forEach(p => {
         let b = '<span class="badge bg-wait">判定待ち</span>';
         if (p.status === 'approved') b = `<span class="badge bg-ok">確定(￥${p.final_price.toLocaleString()})</span>`;
         else if (p.status === 'rejected') b = '<span class="badge bg-ng">NG</span>';
         
-        el.innerHTML += `<div class="item-card"><div style="display:flex;justify-content:space-between;"><strong>${p.product_name}</strong>${b}</div><div style="font-size:11px;color:#666;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div></div>`;
+        el.innerHTML += `<div class="item-card">
+          <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.user_name}</div>
+          <div style="display:flex;justify-content:space-between;margin-top:2px;"><strong>${p.product_name}</strong>${b}</div>
+          <div style="font-size:11px;color:#666;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div>
+        </div>`;
       });
     }
 
@@ -408,9 +420,9 @@
       el.innerHTML = '';
       waits.forEach(p => {
         el.innerHTML += `<div class="item-card">
-          <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.user_name} の提案</div>
-          <strong>${p.product_name}</strong> (${p.spec || '規格なし'})
-          <div style="font-size:12px;">提案単価: <strong>￥${p.proposed_price.toLocaleString()}</strong> / ${p.limited_quantity || ''}</div>
+          <div style="font-size:11px;color:var(--s);font-weight:bold;">提案者: ${p.user_name}</div>
+          <strong style="font-size:14px;">${p.product_name}</strong> (${p.spec || '規格なし'})
+          <div style="font-size:12px;margin:2px 0;">提案単価: <strong>￥${p.proposed_price.toLocaleString()}</strong> / ${p.limited_quantity || ''}</div>
           <div class="act-btns">
             <button class="btn btn-ok" style="margin:0;" onclick="judge('${p.id}','ok')">そのままOK</button>
             <button class="btn btn-ng" style="margin:0;" onclick="judge('${p.id}','ng')">NG</button>
