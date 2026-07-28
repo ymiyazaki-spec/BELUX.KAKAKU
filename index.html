@@ -16,6 +16,8 @@
     .user-bar { background: var(--p); color: #fff; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
     .logout-btn { background: #e74c3c; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
+    .sound-btn { background: #f39c12; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-right: 6px; }
+
     .tabs { display: flex; gap: 4px; margin-bottom: 12px; background: #ddd; padding: 3px; border-radius: 8px; }
     .tab { flex: 1; padding: 8px 2px; text-align: center; font-size: 12px; font-weight: bold; background: none; border: none; border-radius: 6px; cursor: pointer; }
     .tab.active { background: #fff; color: var(--p); }
@@ -70,8 +72,11 @@
     <h1>価格提案システム</h1>
 
     <div class="user-bar">
-      <div>👤 ログイン中: <strong id="user-display-name">---</strong> (<span id="user-role-name">---</span>)</div>
-      <button class="logout-btn" onclick="handleLogout()">ログアウト</button>
+      <div>👤 <strong id="user-display-name">---</strong> (<span id="user-role-name">---</span>)</div>
+      <div>
+        <button id="sound-toggle-btn" class="sound-btn" onclick="enableAudio()">🔔 通知音ON</button>
+        <button class="logout-btn" onclick="handleLogout()">ログアウト</button>
+      </div>
     </div>
 
     <div class="tabs" id="tab-bar">
@@ -121,7 +126,7 @@
           <span style="font-size:12px; font-weight:bold;">現在の残高:</span>
           <span class="sav-val" id="sav-val-clk">￥0</span>
         </div>
-        <label>残高を直接修正（手動入力）</label>
+        <label>集計後の貯金残高を直接修正（手動入力）</label>
         <div style="display:flex; gap:4px; margin-top:2px;">
           <input type="number" id="manual-savings-input" placeholder="例: 20000" style="background:#fff;">
           <button class="btn btn-ok btn-sm" style="width:80px; margin:0;" onclick="updateSavingsManual()">残高更新</button>
@@ -130,7 +135,7 @@
       <div class="card">
         <div class="card-title">確定データ一覧（転記用）</div>
         <table>
-          <thead><tr><th>転記</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>貯金差額</th></tr></thead>
+          <thead><tr><th>転記</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>単価差額</th></tr></thead>
           <tbody id="clk-list"></tbody>
         </table>
       </div>
@@ -151,13 +156,46 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4NTE5MzAwOSwiZXhwIjoyMTAwNzY5MDA5fQ.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentUser = null;
     let currentProfile = null;
     let proposals = [];
     let savingsBalance = 0;
+    let audioCtx = null;
+
+    // 通知音を鳴らす（Web Audio API）
+    function playNotificationSound() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5ノート
+        osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.15); // E6ノート
+
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // バイブレーション
+      } catch (e) { console.log('Audio notification error:', e); }
+    }
+
+    function enableAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume();
+      playNotificationSound();
+      document.getElementById('sound-toggle-btn').innerText = '🔔 通知音有効';
+      document.getElementById('sound-toggle-btn').style.background = '#27ae60';
+    }
 
     async function init() {
       const { data: { session } } = await _supabase.auth.getSession();
@@ -168,10 +206,19 @@
         showLoginScreen();
       }
 
+      // リアルタイム検知＆通知
       _supabase.channel('public:all')
-        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-          if (currentUser) { fetchProposals(); fetchSavings(); }
-        }).subscribe();
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'proposals' }, (payload) => {
+          if (currentUser) {
+            fetchProposals();
+            // 変更があったら通知音
+            playNotificationSound();
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'savings_bank' }, () => {
+          if (currentUser) fetchSavings();
+        })
+        .subscribe();
     }
 
     async function handleLogin() {
@@ -290,7 +337,7 @@
     }
 
     async function fetchSavings() {
-      const { data, error } = await _supabase.from('savings_bank').select('balance').eq('id', 1).single();
+      const { data } = await _supabase.from('savings_bank').select('balance').eq('id', 1).single();
       if (data) {
         savingsBalance = data.balance;
         document.getElementById('sav-val-buy').innerText = '￥' + savingsBalance.toLocaleString();
@@ -358,6 +405,7 @@
       document.getElementById('cancel-edit-btn').style.display = 'none';
     }
 
+    // 判定ロジック（残高金額自体は直接動かさず、単価差額のみ保持）
     async function judge(id, type) {
       const p = proposals.find(x => x.id === id);
       const df = parseInt(document.getElementById(`df-${id}`)?.value) || 0;
@@ -367,15 +415,14 @@
         status = 'rejected';
       } else if (type === 'add') {
         if (df <= 0) return alert('金額を入力してください');
-        finalPrice = p.proposed_price + df; diff = df; savingsBalance += df;
+        finalPrice = p.proposed_price + df; diff = df;
       } else if (type === 'sub') {
-        if (df <= 0 || df > savingsBalance) return alert('残高を確認してください');
-        finalPrice = p.proposed_price - df; diff = -df; savingsBalance -= df;
+        if (df <= 0) return alert('金額を入力してください');
+        finalPrice = p.proposed_price - df; diff = -df;
       }
 
       await _supabase.from('proposals').update({ status, final_price: finalPrice, savings_diff: diff }).eq('id', id);
-      await _supabase.from('savings_bank').update({ balance: savingsBalance }).eq('id', 1);
-      await fetchProposals(); await fetchSavings();
+      await fetchProposals();
     }
 
     async function updateSavingsManual() {
@@ -388,7 +435,8 @@
     }
 
     async function toggleDone(id, currentDone) {
-      await _supabase.from('proposals').update({ is_transferred: !currentDone }).eq('id', id);
+      const isDone = (currentDone === true || currentDone === 'true');
+      await _supabase.from('proposals').update({ is_transferred: !isDone }).eq('id', id);
       await fetchProposals();
     }
 
@@ -426,7 +474,7 @@
             <button class="btn btn-ng" style="margin:0;" onclick="judge('${p.id}','ng')">NG</button>
           </div>
           <div class="diff-group">
-            <input type="number" id="df-${p.id}" placeholder="差額(円)">
+            <input type="number" id="df-${p.id}" placeholder="単価差額(円)">
             <button class="btn btn-s" style="margin:0;width:60px;" onclick="judge('${p.id}','add')">+乗せる</button>
             <button class="btn" style="margin:0;width:60px;border:1px solid #888;" onclick="judge('${p.id}','sub')">-使う</button>
           </div>
@@ -436,7 +484,6 @@
 
     function renderClk() {
       const el = document.getElementById('clk-list');
-      // 確定ステータス（approved）のものをすべて抽出
       const oks = proposals.filter(p => p.status === 'approved');
       if (!oks.length) return el.innerHTML = '<tr><td colspan="5" style="text-align:center;">確定データはありません</td></tr>';
 
