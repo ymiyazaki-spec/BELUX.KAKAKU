@@ -128,7 +128,7 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-title">本日確定データ一覧</div>
+        <div class="card-title">確定データ一覧（転記用）</div>
         <table>
           <thead><tr><th>転記</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>貯金差額</th></tr></thead>
           <tbody id="clk-list"></tbody>
@@ -216,7 +216,6 @@
       let role = 'supplier';
       let displayName = '担当者';
 
-      // 判定ロジックの修正（misawa2 や clerk を事務員として判定）
       if (email.startsWith('belx')) {
         role = 'buyer';
         displayName = 'ベルクス様 (バイヤー)';
@@ -291,7 +290,7 @@
     }
 
     async function fetchSavings() {
-      const { data } = await _supabase.from('savings_bank').select('balance').eq('id', 1).single();
+      const { data, error } = await _supabase.from('savings_bank').select('balance').eq('id', 1).single();
       if (data) {
         savingsBalance = data.balance;
         document.getElementById('sav-val-buy').innerText = '￥' + savingsBalance.toLocaleString();
@@ -437,16 +436,17 @@
 
     function renderClk() {
       const el = document.getElementById('clk-list');
+      // 確定ステータス（approved）のものをすべて抽出
       const oks = proposals.filter(p => p.status === 'approved');
       if (!oks.length) return el.innerHTML = '<tr><td colspan="5" style="text-align:center;">確定データはありません</td></tr>';
 
       el.innerHTML = '';
       oks.forEach(p => {
         el.innerHTML += `<tr class="${p.is_transferred ? 'done' : ''}">
-          <td style="text-align:center;"><input type="checkbox" ${p.is_transferred ? 'checked' : ''} onchange="toggleDone('${p.id}', ${p.is_transferred})"></td>
+          <td style="text-align:center;"><input type="checkbox" ${p.is_transferred ? 'checked' : ''} onchange="toggleDone('${p.id}', '${p.is_transferred}')"></td>
           <td>${p.user_name}</td>
           <td><strong>${p.product_name}</strong><br><span style="font-size:9px;color:#666;">${p.spec||''}</span></td>
-          <td>￥${p.final_price.toLocaleString()}</td>
+          <td>￥${p.final_price ? p.final_price.toLocaleString() : 0}</td>
           <td>${p.savings_diff > 0 ? '+￥'+p.savings_diff : (p.savings_diff < 0 ? '-￥'+Math.abs(p.savings_diff) : '0')}</td>
         </tr>`;
       });
