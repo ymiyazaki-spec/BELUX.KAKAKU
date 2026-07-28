@@ -172,7 +172,7 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4NTE5MzAwOSwiZXhwIjoyMTAwNzY5MDA5fQ.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentUser = null;
@@ -364,7 +364,7 @@
 
       const { error } = await _supabase.from('proposals').insert(payload);
       if (error) {
-        alert('追加に失敗しました。Step 1のSQLが実行されているかご確認ください。');
+        alert('追加に失敗しました。');
         return;
       }
 
@@ -379,11 +379,7 @@
 
     async function deleteDraft(id) {
       const { error } = await _supabase.from('proposals').delete().eq('id', id);
-      if (error) {
-        alert('削除エラー: ' + error.message);
-      } else {
-        await fetchProposals();
-      }
+      if (!error) await fetchProposals();
     }
 
     async function checkAutoPublishTimer() {
@@ -445,11 +441,12 @@
       await fetchProposals();
     }
 
+    // 事務員画面の「本日分クリア」で、判定済み(approved/rejected)データを全画面で非表示化
     async function archiveTodayData() {
-      if (confirm('処理済みの提案データを画面から非表示（クリア）にしますか？\n（過去データは記録として保持されます）')) {
-        await _supabase.from('proposals').update({ is_archived: true }).eq('status', 'approved');
+      if (confirm('処理済みの提案データを画面から非表示（クリア）にしますか？\n（過去データはデータベースの記録として保持されます）')) {
+        await _supabase.from('proposals').update({ is_archived: true }).neq('status', 'draft');
         await fetchProposals();
-        alert('画面をクリアしました');
+        alert('全画面の過去提案をクリアしました！');
       }
     }
 
@@ -473,7 +470,8 @@
       }
 
       const el = document.getElementById('sup-list');
-      const published = proposals.filter(p => p.status !== 'draft');
+      // クリア（is_archived: true）されていない公開済み提案のみ表示
+      const published = proposals.filter(p => p.status !== 'draft' && !p.is_archived);
       if (!published.length) return el.innerHTML = '<div style="font-size:12px;color:#888;">送信済みの提案はありません</div>';
 
       el.innerHTML = '';
