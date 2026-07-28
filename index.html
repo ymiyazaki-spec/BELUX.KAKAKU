@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>価格提案システム</title>
   
-  <!-- アップロードした icon.png をアプリアイコンに指定 -->
   <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/icon.png">
 
@@ -46,7 +45,12 @@
     .draft-table th, .draft-table td { border: 1px solid #ddd; padding: 6px 4px; text-align: left; }
     .draft-table th { background: #f8f9fa; }
 
-    .timer-box { background: #eef7fc; border: 1px solid var(--s); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 12px; }
+    /* 営業完了ステータス表示ボックス */
+    .staff-status-box { background: #eef7fc; border: 1px solid var(--s); border-radius: 6px; padding: 10px; margin-bottom: 12px; }
+    .staff-status-title { font-size: 12px; font-weight: bold; color: var(--p); margin-bottom: 6px; }
+    .staff-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .staff-tag { font-size: 11px; padding: 4px 8px; border-radius: 4px; background: #e0e0e0; color: #666; font-weight: bold; }
+    .staff-tag.done { background: #27ae60; color: #fff; }
 
     .sav-box { background: #eef9f1; border: 1px solid var(--ok); border-radius: 6px; padding: 8px; text-align: center; margin-bottom: 12px; font-size: 12px; }
     .sav-val { font-size: 18px; font-weight: bold; color: var(--ok); }
@@ -62,7 +66,7 @@
     /* 印刷専用スタイル */
     @media print {
       body { background: #fff; padding: 0; color: #000; }
-      h1, .user-bar, .tabs, .timer-box, .btn, .sav-box, #login-screen, .no-print { display: none !important; }
+      h1, .user-bar, .tabs, .staff-status-box, .btn, .sav-box, #login-screen, .no-print { display: none !important; }
       .card { box-shadow: none; border: none; padding: 0; margin: 0; }
       .card-title { border-bottom: 2px solid #000; font-size: 16px; margin-bottom: 10px; }
       table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -104,13 +108,12 @@
 
     <!-- 画面①：仲卸（営業） -->
     <div id="v-sup" class="view">
-      <div class="timer-box">
-        <div style="font-weight:bold; color:var(--p); margin-bottom:4px;">⏰ 一括送信時刻の設定</div>
-        <div style="display:flex; gap:6px; align-items:center;">
-          <input type="time" id="publish-time-input" value="15:00" style="font-size:14px; font-weight:bold; width:120px; padding:4px;">
-          <button class="btn btn-s btn-sm" onclick="savePublishTime()">時刻を変更保存</button>
+      <!-- 営業入力完了ステータスバー -->
+      <div class="staff-status-box">
+        <div class="staff-status-title">📋 本日の下書き入力状況</div>
+        <div class="staff-tags" id="staff-status-tags">
+          <!-- JSで自動判定表示 -->
         </div>
-        <div style="font-size:10px; color:#666; margin-top:4px;">※ 設定した時刻になると下書きが一括でバイヤーへ届き、LINEで通知されます</div>
       </div>
 
       <div class="card">
@@ -139,10 +142,10 @@
         <div style="margin-top:12px;">
           <div style="font-size:12px; font-weight:bold;">未送信の下書きリスト（公開前）</div>
           <table class="draft-table">
-            <thead><tr><th>対象日</th><th>商品名</th><th>規格</th><th>単価</th><th>削除</th></tr></thead>
+            <thead><tr><th>担当</th><th>対象日</th><th>商品名</th><th>規格</th><th>単価</th><th>削除</th></tr></thead>
             <tbody id="draft-list-body"></tbody>
           </table>
-          <button class="btn btn-ok" style="margin-top:10px;" onclick="publishNowManual()">今すぐバイヤーへ手動送信する</button>
+          <button class="btn btn-ok" style="margin-top:10px;" onclick="publishNowManual()">全員揃ったらバイヤーへ送信する</button>
         </div>
       </div>
 
@@ -214,9 +217,6 @@
       const today = new Date().toISOString().split('T')[0];
       document.getElementById('p-target-date').value = today;
 
-      const savedTime = localStorage.getItem('custom_publish_time') || '15:00';
-      document.getElementById('publish-time-input').value = savedTime;
-
       try {
         const { data: { session } } = await _supabase.auth.getSession();
         if (session && session.user) {
@@ -226,13 +226,6 @@
         }
       } catch(e){}
       showLoginScreen();
-    }
-
-    function savePublishTime() {
-      const timeVal = document.getElementById('publish-time-input').value;
-      if (!timeVal) return alert('時間を入力してください');
-      localStorage.setItem('custom_publish_time', timeVal);
-      alert(`一括送信時刻を 【 ${timeVal} 】 に変更・保存しました！`);
     }
 
     async function handleLogin() {
@@ -310,7 +303,6 @@
 
       setInterval(() => {
         if (currentUser) {
-          checkAutoPublishTimer();
           fetchProposals();
           fetchSavings();
         }
@@ -413,20 +405,6 @@
       if (!error) await fetchProposals();
     }
 
-    async function checkAutoPublishTimer() {
-      const setTime = localStorage.getItem('custom_publish_time') || '15:00';
-      const [targetH, targetM] = setTime.split(':').map(Number);
-      
-      const now = new Date();
-      if (now.getHours() === targetH && now.getMinutes() === targetM) {
-        const drafts = proposals.filter(p => p.status === 'draft');
-        if (drafts.length > 0) {
-          await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
-          await fetchProposals();
-        }
-      }
-    }
-
     async function publishNowManual() {
       const drafts = proposals.filter(p => p.status === 'draft');
       if (!drafts.length) return alert('下書きリストに品目がありません');
@@ -485,12 +463,31 @@
       const draftTbody = document.getElementById('draft-list-body');
       const drafts = proposals.filter(p => p.status === 'draft');
       
+      // 下書きに入力がある担当者を自動集計
+      const finishedStaffs = new Set();
+      drafts.forEach(p => {
+        const cleanName = p.user_name.replace('三澤（', '').replace('）', '').trim();
+        finishedStaffs.add(cleanName);
+      });
+
+      // 入力状況タグの描画
+      const statusBox = document.getElementById('staff-status-tags');
+      statusBox.innerHTML = '';
+      if (finishedStaffs.size === 0) {
+        statusBox.innerHTML = '<span style="font-size:11px; color:#888;">まだ誰も下書きを入力していません</span>';
+      } else {
+        finishedStaffs.forEach(staff => {
+          statusBox.innerHTML += `<span class="staff-tag done">👤 ${staff} : 済</span>`;
+        });
+      }
+      
       if (!drafts.length) {
-        draftTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">下書きはありません</td></tr>';
+        draftTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#888;">下書きはありません</td></tr>';
       } else {
         draftTbody.innerHTML = '';
         drafts.forEach(p => {
           draftTbody.innerHTML += `<tr>
+            <td><strong>${p.user_name.replace('三澤（','').replace('）','')}</strong></td>
             <td>${p.target_date ? p.target_date.slice(5) : '-'}</td>
             <td><strong>${p.product_name}</strong></td>
             <td>${p.spec || '-'}</td>
