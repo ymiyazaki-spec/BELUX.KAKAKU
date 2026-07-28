@@ -41,7 +41,7 @@
     .draft-table th, .draft-table td { border: 1px solid #ddd; padding: 6px 4px; text-align: left; }
     .draft-table th { background: #f8f9fa; }
 
-    .timer-box { background: #eef7fc; border: 1px solid var(--s); border-radius: 6px; padding: 8px; margin-bottom: 12px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .timer-box { background: #eef7fc; border: 1px solid var(--s); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 12px; }
 
     .sav-box { background: #eef9f1; border: 1px solid var(--ok); border-radius: 6px; padding: 8px; text-align: center; margin-bottom: 12px; font-size: 12px; }
     .sav-val { font-size: 18px; font-weight: bold; color: var(--ok); }
@@ -85,9 +85,14 @@
 
     <!-- 画面①：仲卸（営業） -->
     <div id="v-sup" class="view">
+      <!-- 送信時刻の設定ボックス -->
       <div class="timer-box">
-        <div>⏰ バイヤーへの一括公開時刻: <strong id="timer-display-time">10:00</strong></div>
-        <span style="font-size:10px; color:#666;">（時間になると自動で全提案が一括届きます）</span>
+        <div style="font-weight:bold; color:var(--p); margin-bottom:4px;">⏰ 一括送信時刻の設定</div>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="time" id="publish-time-input" value="15:00" style="font-size:14px; font-weight:bold; width:120px; padding:4px;">
+          <button class="btn btn-s btn-sm" onclick="savePublishTime()">時刻を変更保存</button>
+        </div>
+        <div style="font-size:10px; color:#666; margin-top:4px;">※ 設定した時刻になると下書きが一括でバイヤーへ届きます</div>
       </div>
 
       <div class="card">
@@ -175,15 +180,15 @@
     let currentProfile = null;
     let proposals = [];
     let savingsBalance = 0;
-    
-    // バイヤーへの一括公開設定時刻 (デフォルト: 15:00)
-    const PUBLISH_HOUR = 15;
-    const PUBLISH_MINUTE = 0;
 
     async function init() {
       // 本日の日付を自動セット
       const today = new Date().toISOString().split('T')[0];
       document.getElementById('p-target-date').value = today;
+
+      // 保存されている送信時間を復元（デフォルト: 15:00）
+      const savedTime = localStorage.getItem('custom_publish_time') || '15:00';
+      document.getElementById('publish-time-input').value = savedTime;
 
       try {
         const { data: { session } } = await _supabase.auth.getSession();
@@ -194,6 +199,13 @@
         }
       } catch(e){}
       showLoginScreen();
+    }
+
+    function savePublishTime() {
+      const timeVal = document.getElementById('publish-time-input').value;
+      if (!timeVal) return alert('時間を入力してください');
+      localStorage.setItem('custom_publish_time', timeVal);
+      alert(`一括送信時刻を 【 ${timeVal} 】 に変更・保存しました！`);
     }
 
     async function handleLogin() {
@@ -269,7 +281,7 @@
       await fetchProposals();
       await fetchSavings();
 
-      // 定期実行チェック（自動送信タイマー ＆ データ更新）
+      // 定期実行チェック（5秒ごとに時間チェック＆データ更新）
       setInterval(() => {
         if (currentUser) {
           checkAutoPublishTimer();
@@ -351,7 +363,7 @@
         proposed_price: price,
         limited_quantity: qty,
         target_date: targetDate,
-        status: 'draft', // まだバイヤーには見えない「下書き」
+        status: 'draft',
         is_archived: false
       };
 
@@ -371,10 +383,13 @@
       await fetchProposals();
     }
 
-    // 指定時間での自動一括送信チェック
+    // 設定時間になったかどうかの自動判定
     async function checkAutoPublishTimer() {
+      const setTime = localStorage.getItem('custom_publish_time') || '15:00';
+      const [targetH, targetM] = setTime.split(':').map(Number);
+      
       const now = new Date();
-      if (now.getHours() === PUBLISH_HOUR && now.getMinutes() === PUBLISH_MINUTE) {
+      if (now.getHours() === targetH && now.getMinutes() === targetM) {
         const drafts = proposals.filter(p => p.status === 'draft');
         if (drafts.length > 0) {
           await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
@@ -429,7 +444,6 @@
       await fetchProposals();
     }
 
-    // 事務員画面の「本日分クリア（アーカイブ）」
     async function archiveTodayData() {
       if (confirm('処理済みの提案データを画面から非表示（クリア）にしますか？\n（過去データは記録として保持されます）')) {
         await _supabase.from('proposals').update({ is_archived: true }).eq('status', 'approved');
@@ -501,7 +515,6 @@
 
     function renderClk() {
       const el = document.getElementById('clk-list');
-      // アーカイブ（画面クリア）されていない確定データのみ表示
       const oks = proposals.filter(p => p.status === 'approved' && !p.is_archived);
       if (!oks.length) return el.innerHTML = '<tr><td colspan="6" style="text-align:center;">確定データはありません</td></tr>';
 
