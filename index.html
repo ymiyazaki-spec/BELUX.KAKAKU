@@ -164,9 +164,7 @@
     let proposals = [];
     let savingsBalance = 0;
     let audioCtx = null;
-    let realtimeChannel = null;
 
-    // 通知音を鳴らす（Web Audio API）
     function playNotificationSound() {
       try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -199,38 +197,18 @@
     }
 
     async function init() {
-      const { data: { session } } = await _supabase.auth.getSession();
-      if (session) {
-        currentUser = session.user;
-        await loadUserProfile();
-      } else {
-        showLoginScreen();
+      // 古いキャッシュセッションによるクラッシュを防止
+      try {
+        const { data: { session } } = await _supabase.auth.getSession();
+        if (session && session.user) {
+          currentUser = session.user;
+          await loadUserProfile();
+          return;
+        }
+      } catch(e) {
+        console.log('Session fetch bypassed:', e);
       }
-    }
-
-    // リアルタイム通信の初期化（全テーブル変更の監視強化）
-    function setupRealtimeSubscription() {
-      if (realtimeChannel) _supabase.removeChannel(realtimeChannel);
-
-      realtimeChannel = _supabase.channel('db-changes')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'proposals' },
-          (payload) => {
-            fetchProposals();
-            playNotificationSound();
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'savings_bank' },
-          (payload) => {
-            fetchSavings();
-          }
-        )
-        .subscribe((status) => {
-          console.log('Realtime Status:', status);
-        });
+      showLoginScreen();
     }
 
     async function handleLogin() {
@@ -264,8 +242,7 @@
     }
 
     async function handleLogout() {
-      if (realtimeChannel) _supabase.removeChannel(realtimeChannel);
-      await _supabase.auth.signOut();
+      try { await _supabase.auth.signOut(); } catch(e){}
       currentUser = null;
       currentProfile = null;
       showLoginScreen();
@@ -306,7 +283,14 @@
       setupViewByRole(currentProfile.role);
       await fetchProposals();
       await fetchSavings();
-      setupRealtimeSubscription(); // ログイン完了後にリアルタイム受信開始
+
+      // ポーリング型自動更新（3秒ごとに最新データを取得してリアルタイム反映）
+      setInterval(() => {
+        if (currentUser) {
+          fetchProposals(true);
+          fetchSavings();
+        }
+      }, 3000);
     }
 
     function setupViewByRole(role) {
@@ -344,9 +328,17 @@
       document.getElementById('v-' + v).classList.add('active');
     }
 
-    async function fetchProposals() {
+    let lastProposalCount = -1;
+    async function fetchProposals(isBackground = false) {
       const { data } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
-      if (data) proposals = data;
+      if (data) {
+        // バックグラウンド取得時に件数や内容に変更があれば通知音を鳴らす
+        if (isBackground && lastProposalCount !== -1 && JSON.stringify(data) !== JSON.stringify(proposals)) {
+          playNotificationSound();
+        }
+        proposals = data;
+        lastProposalCount = data.length;
+      }
       renderSup(); renderBuy(); renderClk();
     }
 
