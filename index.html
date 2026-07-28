@@ -58,7 +58,7 @@
   <div id="login-screen" class="login-container">
     <div class="login-title">🔒 システムログイン</div>
     <div id="login-error" style="color:var(--ng); font-size:11px; margin-bottom:8px; text-align:center; display:none;"></div>
-    <label>ユーザーID（例: belx または misawa）</label>
+    <label>ユーザーID（例: belx , misawa , clerk）</label>
     <input type="text" id="login-id" placeholder="例: belx">
     <label>パスワード</label>
     <input type="password" id="login-pw" placeholder="••••••••">
@@ -150,6 +150,7 @@
   </div>
 
   <script>
+    // Supabase接続情報（設定済み）
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MzY4OTIwOSwiZXhwIjoyMDY5MjY1MjA5fQ.L_eGkL1-43I3aO8Xj7p2w7E90GvSg7yB80R6I_qKx5g';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -186,7 +187,6 @@
         return;
       }
 
-      // ドメイン補完を @kakaku.internal に設定（タイポの @kakaku.intenal にも対応）
       let email = rawId;
       if (!rawId.includes('@')) {
         email = `${rawId}@kakaku.internal`;
@@ -194,7 +194,6 @@
 
       let { data, error } = await _supabase.auth.signInWithPassword({ email, password: pw });
       
-      // もしダメならスペルミス用でも一応試行
       if (error && !rawId.includes('@')) {
         const altEmail = `${rawId}@kakaku.intenal`;
         const res = await _supabase.auth.signInWithPassword({ email: altEmail, password: pw });
@@ -218,7 +217,6 @@
     }
 
     async function loadUserProfile() {
-      // ユーザー判定（ID名からロールを簡易割り当て）
       const email = currentUser.email;
       let role = 'supplier';
       let displayName = '担当者';
