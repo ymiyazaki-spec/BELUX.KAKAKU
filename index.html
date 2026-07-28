@@ -156,7 +156,7 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGJuZ2p0Y2lsZ3FlenRvZGEiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc4NTE5MzAwOSwiZXhwIjoyMTAwNzY5MDA5fQ.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentUser = null;
@@ -164,6 +164,7 @@
     let proposals = [];
     let savingsBalance = 0;
     let audioCtx = null;
+    let realtimeChannel = null;
 
     // 通知音を鳴らす（Web Audio API）
     function playNotificationSound() {
@@ -174,8 +175,8 @@
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5ノート
-        osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.15); // E6ノート
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.15);
 
         gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
@@ -185,7 +186,7 @@
         osc.start();
         osc.stop(audioCtx.currentTime + 0.3);
 
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // バイブレーション
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
       } catch (e) { console.log('Audio notification error:', e); }
     }
 
@@ -205,20 +206,31 @@
       } else {
         showLoginScreen();
       }
+    }
 
-      // リアルタイム検知＆通知
-      _supabase.channel('public:all')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'proposals' }, (payload) => {
-          if (currentUser) {
+    // リアルタイム通信の初期化（全テーブル変更の監視強化）
+    function setupRealtimeSubscription() {
+      if (realtimeChannel) _supabase.removeChannel(realtimeChannel);
+
+      realtimeChannel = _supabase.channel('db-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'proposals' },
+          (payload) => {
             fetchProposals();
-            // 変更があったら通知音
             playNotificationSound();
           }
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'savings_bank' }, () => {
-          if (currentUser) fetchSavings();
-        })
-        .subscribe();
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'savings_bank' },
+          (payload) => {
+            fetchSavings();
+          }
+        )
+        .subscribe((status) => {
+          console.log('Realtime Status:', status);
+        });
     }
 
     async function handleLogin() {
@@ -252,6 +264,7 @@
     }
 
     async function handleLogout() {
+      if (realtimeChannel) _supabase.removeChannel(realtimeChannel);
       await _supabase.auth.signOut();
       currentUser = null;
       currentProfile = null;
@@ -291,8 +304,9 @@
       document.getElementById('app-screen').style.display = 'block';
 
       setupViewByRole(currentProfile.role);
-      fetchProposals();
-      fetchSavings();
+      await fetchProposals();
+      await fetchSavings();
+      setupRealtimeSubscription(); // ログイン完了後にリアルタイム受信開始
     }
 
     function setupViewByRole(role) {
@@ -405,7 +419,6 @@
       document.getElementById('cancel-edit-btn').style.display = 'none';
     }
 
-    // 判定ロジック（残高金額自体は直接動かさず、単価差額のみ保持）
     async function judge(id, type) {
       const p = proposals.find(x => x.id === id);
       const df = parseInt(document.getElementById(`df-${id}`)?.value) || 0;
