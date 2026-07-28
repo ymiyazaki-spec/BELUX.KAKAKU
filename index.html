@@ -435,7 +435,8 @@
 
     async function judge(id, type) {
       const p = proposals.find(x => x.id === id);
-      const df = parseInt(document.getElementById(`df-${id}`)?.value) || 0;
+      const inputEl = document.getElementById(`df-${id}`);
+      const df = parseInt(inputEl?.value) || 0;
       let status = 'approved', finalPrice = p.proposed_price, diff = 0;
 
       if (type === 'ng') {
@@ -513,12 +514,26 @@
     }
 
     function renderBuy() {
+      // 入力中の項目を保護するために、フォーカス・入力中の要素をチェック
+      const activeEl = document.activeElement;
+      if (activeEl && activeEl.tagName === 'INPUT' && activeEl.value.trim() !== '') {
+        return; // 入力中であれば描画更新をスキップして数値を保護
+      }
+
       const el = document.getElementById('buy-list');
       const waits = proposals.filter(p => p.status === 'pending');
       if (!waits.length) return el.innerHTML = '<div style="font-size:12px;color:#888;text-align:center;">未判定の提案はありません</div>';
 
+      // 入力中の値を一時保存
+      const currentValues = {};
+      waits.forEach(p => {
+        const input = document.getElementById(`df-${p.id}`);
+        if (input) currentValues[p.id] = input.value;
+      });
+
       el.innerHTML = '';
       waits.forEach(p => {
+        const val = currentValues[p.id] || '';
         el.innerHTML += `<div class="item-card">
           <div style="font-size:11px;color:var(--s);font-weight:bold;">【対象日: ${p.target_date || '未設定'}】 担当: ${p.user_name}</div>
           <strong style="font-size:14px;">${p.product_name}</strong> (${p.spec || '規格なし'})
@@ -528,7 +543,7 @@
             <button class="btn btn-ng" style="margin:0;" onclick="judge('${p.id}','ng')">NG</button>
           </div>
           <div class="diff-group">
-            <input type="number" id="df-${p.id}" placeholder="単価差額(円)">
+            <input type="number" id="df-${p.id}" value="${val}" placeholder="単価差額(円)">
             <button class="btn btn-s" style="margin:0;width:60px;" onclick="judge('${p.id}','add')">+乗せる</button>
             <button class="btn" style="margin:0;width:60px;border:1px solid #888;" onclick="judge('${p.id}','sub')">-使う</button>
           </div>
