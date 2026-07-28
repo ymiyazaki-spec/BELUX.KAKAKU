@@ -207,7 +207,7 @@
       showLoginScreen();
     }
 
-    // LINE一斉送信関数（三澤商事に修正）
+    // LINE一斉送信関数
     async function sendLineNotification(count, staffName) {
       if (!LINE_CHANNEL_TOKEN) return;
       
@@ -218,7 +218,7 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${LINE_CHANNEL_TOKEN}`
+            'Authorization': `Bearer ${LINE_CHANNEL_TOKEN.trim()}`
           },
           body: JSON.stringify({
             messages: [{ type: 'text', text: messageText }]
@@ -354,7 +354,7 @@
     }
 
     async function fetchProposals() {
-      const { data } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
+      const { data, error } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
       if (data) proposals = data;
       renderSup(); renderBuy(); renderClk();
     }
@@ -379,7 +379,6 @@
       if (!rawStaffName) return alert('営業担当者名を入力してください');
       if (!name || price <= 0) return alert('商品名と単価を入力してください');
 
-      // 三澤商事表記へ統一
       const fullStaffName = rawStaffName.includes('三澤') ? rawStaffName : `三澤（${rawStaffName}）`;
       localStorage.setItem('last_staff_name', rawStaffName);
 
@@ -415,7 +414,6 @@
       if (!error) await fetchProposals();
     }
 
-    // 自動タイマー送信（時刻になるとLINE通知）
     async function checkAutoPublishTimer() {
       const setTime = localStorage.getItem('custom_publish_time') || '15:00';
       const [targetH, targetM] = setTime.split(':').map(Number);
@@ -427,13 +425,11 @@
           const staffName = drafts[0].user_name || '';
           await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
           await fetchProposals();
-          // LINE通知送信
           await sendLineNotification(drafts.length, staffName);
         }
       }
     }
 
-    // 手動一括送信（送信と同時にLINE通知）
     async function publishNowManual() {
       const drafts = proposals.filter(p => p.status === 'draft');
       if (!drafts.length) return alert('下書きリストに品目がありません');
@@ -442,9 +438,8 @@
         const staffName = drafts[0].user_name || '';
         await _supabase.from('proposals').update({ status: 'pending' }).eq('status', 'draft');
         await fetchProposals();
-        // LINE通知送信
         await sendLineNotification(drafts.length, staffName);
-        alert('バイヤーへ送信＆LINE通知が完了しました！');
+        alert('バイヤーへ送信完了しました！');
       }
     }
 
