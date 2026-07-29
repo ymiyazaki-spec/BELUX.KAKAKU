@@ -64,6 +64,7 @@
     .view { display: none; }
     .view.active { display: block; }
 
+    /* 印刷スタイル（白黒・転記用の最適化） */
     @media print {
       body { background: #fff; padding: 0; color: #000; }
       h1, .user-bar, .tabs, .staff-status-box, .btn, .sav-box, #login-screen, .no-print { display: none !important; }
@@ -74,8 +75,10 @@
       th { background: #f0f0f0 !important; }
       .done { background: none !important; color: #000 !important; }
       .print-header { display: block !important; font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 12px; }
+      .bold-price { font-weight: bold !important; font-size: 13px !important; }
     }
     .print-header { display: none; }
+    .bold-price { font-weight: bold; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -132,16 +135,19 @@
           <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
           <div class="grid">
             <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
-            <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
+            <div><label>入数</label><input type="text" id="p-pack-count" placeholder="例: 10入"></div>
           </div>
-          <label>限定数量</label><input type="text" id="p-qty" placeholder="例: 50ケース">
+          <div class="grid">
+            <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
+            <div><label>限定数量</label><input type="text" id="p-qty" placeholder="例: 50ケース"></div>
+          </div>
           <button class="btn btn-s" style="margin-top:8px; background:var(--p);" onclick="addProposalDraft()">下書きリストに追加</button>
         </div>
 
         <div style="margin-top:12px;">
           <div style="font-size:12px; font-weight:bold;">未送信の下書きリスト（公開前）</div>
           <table class="draft-table">
-            <thead><tr><th>担当</th><th>対象日</th><th>商品名</th><th>規格</th><th>単価</th><th>削除</th></tr></thead>
+            <thead><tr><th>担当</th><th>対象日</th><th>商品/規格/入数</th><th>単価</th><th>数量</th><th>削除</th></tr></thead>
             <tbody id="draft-list-body"></tbody>
           </table>
           <button class="btn btn-ok" style="margin-top:10px;" onclick="publishNowManual()">全員揃ったらバイヤーへ送信する</button>
@@ -190,7 +196,17 @@
           </div>
         </div>
         <table>
-          <thead><tr><th class="no-print">転記</th><th>対象日</th><th>担当</th><th>商品/規格</th><th>確定単価</th><th>単価差額</th></tr></thead>
+          <thead>
+            <tr>
+              <th class="no-print">転記</th>
+              <th>対象日</th>
+              <th>商品/産地/規格/入数</th>
+              <th>提案価格</th>
+              <th>確定単価</th>
+              <th>限定数量</th>
+              <th>担当</th>
+            </tr>
+          </thead>
           <tbody id="clk-list"></tbody>
         </table>
       </div>
@@ -365,10 +381,16 @@
       const name = document.getElementById('p-name').value.trim();
       const price = parseInt(document.getElementById('p-price').value) || 0;
       const spec = document.getElementById('p-spec').value.trim();
+      const packCount = document.getElementById('p-pack-count').value.trim();
       const qty = document.getElementById('p-qty').value.trim();
 
       if (!rawStaffName) return alert('営業担当者名を入力してください');
       if (!name || price <= 0) return alert('商品名と単価を入力してください');
+
+      let combinedSpec = spec;
+      if (packCount) {
+        combinedSpec = spec ? `${spec} / ${packCount}` : packCount;
+      }
 
       const fullStaffName = rawStaffName.includes('三澤') ? rawStaffName : `三澤（${rawStaffName}）`;
       localStorage.setItem('last_staff_name', rawStaffName);
@@ -376,7 +398,7 @@
       const payload = {
         user_name: fullStaffName,
         product_name: name,
-        spec: spec,
+        spec: combinedSpec,
         proposed_price: price,
         limited_quantity: qty,
         target_date: targetDate,
@@ -393,6 +415,7 @@
 
       document.getElementById('p-name').value = '';
       document.getElementById('p-spec').value = '';
+      document.getElementById('p-pack-count').value = '';
       document.getElementById('p-price').value = '';
       document.getElementById('p-qty').value = '';
       document.getElementById('p-name').focus();
@@ -436,13 +459,13 @@
       if (!error) await fetchProposals();
     }
 
-    // 過去品目のコピー呼び出し機能
     function copyProposalToForm(id) {
       const p = proposals.find(x => x.id === id);
       if (!p) return;
 
       document.getElementById('p-name').value = p.product_name || '';
       document.getElementById('p-spec').value = p.spec || '';
+      document.getElementById('p-pack-count').value = '';
       document.getElementById('p-price').value = p.proposed_price || '';
       document.getElementById('p-qty').value = p.limited_quantity || '';
 
@@ -462,7 +485,6 @@
       if (confirm(`下書きにある提案を送信しますか？`)) {
         if (validDrafts.length > 0) {
           const validIds = validDrafts.map(p => p.id);
-          // statusを'pending'に変更した瞬間、Supabase側で1通だけLINE通知が自動送信されます
           const { error } = await _supabase.from('proposals').update({ status: 'pending' }).in('id', validIds);
           if (error) return alert('【送信エラー】\n' + error.message);
         }
@@ -558,9 +580,9 @@
           draftTbody.innerHTML += `<tr style="${isNone ? 'background:#f0f0f0; color:#888;' : ''}">
             <td><strong>${p.user_name.replace('三澤（','').replace('）','')}</strong></td>
             <td>${p.target_date ? p.target_date.slice(5) : '-'}</td>
-            <td><strong>${p.product_name}</strong></td>
-            <td>${p.spec || '-'}</td>
+            <td><strong>${p.product_name}</strong><br><span style="font-size:9px;color:#666;">${p.spec||'-'}</span></td>
             <td>${isNone ? '-' : '￥' + p.proposed_price.toLocaleString()}</td>
+            <td>${p.limited_quantity || '-'}</td>
             <td style="text-align:center;"><button class="btn btn-ng btn-sm" style="padding:1px 5px;" onclick="deleteDraft('${p.id}')">✕</button></td>
           </tr>`;
         });
@@ -570,7 +592,6 @@
       const selectedDate = document.getElementById('p-target-date').value;
       const subTitleEl = document.getElementById('sup-list-sub-title');
 
-      // 日付連動履歴表示
       let published = proposals.filter(p => p.status !== 'draft');
       if (selectedDate) {
         published = published.filter(p => p.target_date === selectedDate);
@@ -644,17 +665,28 @@
     function renderClk() {
       const el = document.getElementById('clk-list');
       const oks = proposals.filter(p => p.status === 'approved' && !p.is_archived);
-      if (!oks.length) return el.innerHTML = '<tr><td colspan="6" style="text-align:center;">確定データはありませんでした</td></tr>';
+      if (!oks.length) return el.innerHTML = '<tr><td colspan="7" style="text-align:center;">確定データはありませんでした</td></tr>';
 
       el.innerHTML = '';
       oks.forEach(p => {
+        let diffText = '';
+        if (p.savings_diff > 0) {
+          diffText = ` <span style="font-size:10px;">(+${p.savings_diff})</span>`;
+        } else if (p.savings_diff < 0) {
+          diffText = ` <span style="font-size:10px;">(-${Math.abs(p.savings_diff)})</span>`;
+        }
+
+        const propPriceStr = p.proposed_price ? '￥' + p.proposed_price.toLocaleString() : '￥0';
+        const finalPriceStr = p.final_price ? '￥' + p.final_price.toLocaleString() : '￥0';
+
         el.innerHTML += `<tr class="${p.is_transferred ? 'done' : ''}">
           <td class="no-print" style="text-align:center;"><input type="checkbox" ${p.is_transferred ? 'checked' : ''} onchange="toggleDone('${p.id}', '${p.is_transferred}')"></td>
           <td>${p.target_date ? p.target_date.slice(5) : '-'}</td>
-          <td>${p.user_name}</td>
           <td><strong>${p.product_name}</strong><br><span style="font-size:9px;color:#666;">${p.spec||''}</span></td>
-          <td>￥${p.final_price ? p.final_price.toLocaleString() : 0}</td>
-          <td>${p.savings_diff > 0 ? '+￥'+p.savings_diff : (p.savings_diff < 0 ? '-￥'+Math.abs(p.savings_diff) : '0')}</td>
+          <td>${propPriceStr}${diffText}</td>
+          <td class="bold-price">${finalPriceStr}</td>
+          <td>${p.limited_quantity || '-'}</td>
+          <td>${p.user_name}</td>
         </tr>`;
       });
     }
