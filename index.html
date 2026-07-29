@@ -200,7 +200,9 @@
             <tr>
               <th class="no-print">転記</th>
               <th>対象日</th>
-              <th>商品/産地/規格/入数</th>
+              <th>商品名</th>
+              <th>産地/規格</th>
+              <th>入数</th>
               <th>提案価格</th>
               <th>確定単価</th>
               <th>限定数量</th>
@@ -665,7 +667,7 @@
     function renderClk() {
       const el = document.getElementById('clk-list');
       const oks = proposals.filter(p => p.status === 'approved' && !p.is_archived);
-      if (!oks.length) return el.innerHTML = '<tr><td colspan="7" style="text-align:center;">確定データはありませんでした</td></tr>';
+      if (!oks.length) return el.innerHTML = '<tr><td colspan="9" style="text-align:center;">確定データはありませんでした</td></tr>';
 
       el.innerHTML = '';
       oks.forEach(p => {
@@ -679,10 +681,21 @@
         const propPriceStr = p.proposed_price ? '￥' + p.proposed_price.toLocaleString() : '￥0';
         const finalPriceStr = p.final_price ? '￥' + p.final_price.toLocaleString() : '￥0';
 
+        // spec (例: "青森/28玉 / 10入") から「産地/規格」と「入数」を綺麗に分離
+        let specStr = p.spec || '-';
+        let packStr = '-';
+        if (specStr.includes(' / ')) {
+          const parts = specStr.split(' / ');
+          specStr = parts[0] || '-';
+          packStr = parts[1] || '-';
+        }
+
         el.innerHTML += `<tr class="${p.is_transferred ? 'done' : ''}">
           <td class="no-print" style="text-align:center;"><input type="checkbox" ${p.is_transferred ? 'checked' : ''} onchange="toggleDone('${p.id}', '${p.is_transferred}')"></td>
           <td>${p.target_date ? p.target_date.slice(5) : '-'}</td>
-          <td><strong>${p.product_name}</strong><br><span style="font-size:9px;color:#666;">${p.spec||''}</span></td>
+          <td><strong>${p.product_name}</strong></td>
+          <td>${specStr}</td>
+          <td>${packStr}</td>
           <td>${propPriceStr}${diffText}</td>
           <td class="bold-price">${finalPriceStr}</td>
           <td>${p.limited_quantity || '-'}</td>
