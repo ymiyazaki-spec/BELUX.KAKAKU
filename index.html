@@ -129,7 +129,11 @@
         <button class="btn btn-sub" style="margin-top:8px;" onclick="addNoProposalDraft()">🚫 本日は提案なし（完了として登録）</button>
 
         <div style="background:#f8f9fa; padding:8px; border-radius:6px; border:1px solid #e0e0e0; margin-top:8px;">
-          <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
+          <label>商品名（過去の入力履歴から選択可）</label>
+          <!-- 予測変換候補(datalist)を紐付け -->
+          <input type="text" id="p-name" placeholder="例: サンふじ" list="product-history-list" autocomplete="off">
+          <datalist id="product-history-list"></datalist>
+
           <div class="grid">
             <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
             <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
@@ -348,6 +352,7 @@
       const { data } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
       if (data) proposals = data;
       renderSup(); renderBuy(); renderClk();
+      updateProductHistoryList(); // 過去商品候補の更新
     }
 
     async function fetchSavings() {
@@ -357,6 +362,26 @@
         document.getElementById('sav-val-buy').innerText = '￥' + savingsBalance.toLocaleString();
         document.getElementById('sav-val-clk').innerText = '￥' + savingsBalance.toLocaleString();
       }
+    }
+
+    // 過去に入力された商品名を抽出して予測変換リスト(datalist)を作る
+    function updateProductHistoryList() {
+      const datalist = document.getElementById('product-history-list');
+      if (!datalist) return;
+
+      const productNames = new Set();
+      proposals.forEach(p => {
+        if (p.product_name && p.product_name !== '（本日提案なし）') {
+          productNames.add(p.product_name);
+        }
+      });
+
+      datalist.innerHTML = '';
+      productNames.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        datalist.appendChild(option);
+      });
     }
 
     async function addProposalDraft() {
@@ -436,7 +461,6 @@
       if (!error) await fetchProposals();
     }
 
-    // ★ 画面から1回だけ確実にLINE通知を飛ばす関数 ★
     async function sendLineNotificationDirect() {
       try {
         await fetch('https://api.line.me/v2/bot/message/broadcast', {
@@ -474,7 +498,6 @@
           await _supabase.from('proposals').delete().in('id', noPropIds);
         }
 
-        // 送信ボタンを押したタイミングで、LINEへ1回だけ確実に送信
         await sendLineNotificationDirect();
 
         await fetchProposals();
