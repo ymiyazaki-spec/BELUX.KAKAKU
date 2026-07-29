@@ -462,8 +462,10 @@
       if (confirm(`下書きにある提案を送信しますか？`)) {
         if (validDrafts.length > 0) {
           const validIds = validDrafts.map(p => p.id);
-          // Supabaseのデータベーストリガー（Step 1で設定）が自動で1通だけLINEを送信します
-          await _supabase.from('proposals').update({ status: 'pending' }).in('id', validIds);
+          const { error } = await _supabase.from('proposals').update({ status: 'pending' }).in('id', validIds);
+          if (error) {
+            return alert('【送信エラー】\n' + error.message);
+          }
         }
         
         const noPropIds = drafts.filter(p => p.product_name === '（本日提案なし）').map(p => p.id);
@@ -472,7 +474,7 @@
         }
 
         await fetchProposals();
-        alert('バイヤーへ送信完了しました！（LINE通知も送信されました）');
+        alert('バイヤーへ送信完了しました！');
       }
     }
 
