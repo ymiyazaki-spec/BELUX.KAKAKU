@@ -67,7 +67,7 @@
     @media print {
       body { background: #fff; padding: 0; color: #000; }
       h1, .user-bar, .tabs, .staff-status-box, .btn, .sav-box, #login-screen, .no-print { display: none !important; }
-      .card { box-shadow: none; border: none; padding: 0; margin: 0; }
+      .card { shadow: none; border: none; padding: 0; margin: 0; }
       .card-title { border-bottom: 2px solid #000; font-size: 16px; margin-bottom: 10px; }
       table { width: 100%; border-collapse: collapse; font-size: 12px; }
       th, td { border: 1px solid #000 !important; padding: 6px; text-align: left; color: #000 !important; }
@@ -149,7 +149,8 @@
       </div>
 
       <div class="card">
-        <div class="card-title">送信済みの提案履歴一覧</div>
+        <div class="card-title">送信済みの提案履歴</div>
+        <div id="sup-list-sub-title" style="font-size:11px; color:var(--s); margin-bottom:6px; font-weight:bold;"></div>
         <div id="sup-list">データ読み込み中...</div>
       </div>
     </div>
@@ -453,7 +454,7 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // LINE通知リレー送信
+    // LINE通知送信
     async function sendLineNotificationDirect() {
       try {
         const targetUrl = 'https://api.line.me/v2/bot/message/broadcast';
@@ -591,12 +592,22 @@
       }
 
       const el = document.getElementById('sup-list');
+      const selectedDate = document.getElementById('p-target-date').value;
+      const subTitleEl = document.getElementById('sup-list-sub-title');
 
-      // ★ すべての送信済み提案（draft以外）を素直にすべて表示します ★
-      const published = proposals.filter(p => p.status !== 'draft');
+      // ★ 日付と完全連動するフィルタリング ★
+      let published = proposals.filter(p => p.status !== 'draft');
+      if (selectedDate) {
+        published = published.filter(p => p.target_date === selectedDate);
+        subTitleEl.innerText = `📅 【${selectedDate}】 の提案履歴を表示中`;
+      } else {
+        subTitleEl.innerText = `📅 日付を選択してください`;
+      }
 
       if (!published.length) {
-        return el.innerHTML = '<div style="font-size:12px;color:#888;padding:10px;text-align:center;">送信済みの提案履歴はありません</div>';
+        return el.innerHTML = `<div style="font-size:12px;color:#888;padding:10px;text-align:center;">
+          ${selectedDate ? selectedDate + ' の提案履歴はありません' : '提案履歴はありません'}
+        </div>`;
       }
 
       el.innerHTML = '';
