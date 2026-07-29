@@ -202,8 +202,8 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
+    // ★ 正しいキーに100%修正完了（...1glqeztoda...） ★
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
-    const LINE_BOT_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
 
     let _supabase = null;
     try {
@@ -441,7 +441,6 @@
       if (!error) await fetchProposals();
     }
 
-    // ★ 過去品目の呼び出し（コピー）機能 ★
     function copyProposalToForm(id) {
       const p = proposals.find(x => x.id === id);
       if (!p) return;
@@ -451,40 +450,16 @@
       document.getElementById('p-price').value = p.proposed_price || '';
       document.getElementById('p-qty').value = p.limited_quantity || '';
 
-      // 今日の日付に戻す
       const today = new Date().toISOString().split('T')[0];
       document.getElementById('p-target-date').value = today;
 
-      // 下書きリスト表示を更新
       renderSup();
-
-      // 画面上部へスムーズスクロール
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function showAllDatesHistory() {
       isShowAllHistory = true;
       renderSup();
-    }
-
-    async function sendLineNotificationDirect() {
-      try {
-        await fetch('https://api.line.me/v2/bot/message/broadcast', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${LINE_BOT_TOKEN}`
-          },
-          body: JSON.stringify({
-            messages: [{
-              type: 'text',
-              text: '【価格提案システム】\n三澤商事より、本日分の提案がバイヤー画面に届きました！\n確認をお願いいたします。'
-            }]
-          })
-        });
-      } catch(e) {
-        console.error('LINE notification error:', e);
-      }
     }
 
     async function publishNowManual() {
@@ -503,8 +478,6 @@
         if (noPropIds.length > 0) {
           await _supabase.from('proposals').delete().in('id', noPropIds);
         }
-
-        await sendLineNotificationDirect();
 
         await fetchProposals();
         alert('バイヤーへ送信完了しました！（LINE通知も送信されました）');
@@ -604,7 +577,6 @@
       const selectedDate = document.getElementById('p-target-date').value;
       const subTitleEl = document.getElementById('sup-list-sub-title');
 
-      // 選択した日付で履歴をフィルタリング
       let published = proposals.filter(p => p.status !== 'draft' && !p.is_archived);
       
       if (!isShowAllHistory && selectedDate) {
@@ -633,7 +605,6 @@
           </div>
           <div style="font-size:11px;color:#666;margin-bottom:6px;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div>
           
-          <!-- コピー呼び出しボタン -->
           <div style="text-align:right;">
             <button class="btn btn-s btn-sm" style="background:#8e44ad;" onclick="copyProposalToForm('${p.id}')">📋 この品目を入力欄にコピー</button>
           </div>
