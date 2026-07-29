@@ -199,7 +199,7 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    // ★ 正しいキー（...1glqeztoda...）に完全固定 ★
+    // 正しいANON KEYに固定
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     const LINE_BOT_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
 
@@ -455,7 +455,7 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // ★ 昨日の成功パターン：送信ボタン押下時だけに「1通だけ」LINE通知を送信する処理 ★
+    // ★ 昨日の成功コード：送信時のみ1回だけLINE通知を発動する処理 ★
     async function sendLineNotificationDirect() {
       try {
         await fetch('https://api.line.me/v2/bot/message/broadcast', {
@@ -493,7 +493,7 @@
           await _supabase.from('proposals').delete().in('id', noPropIds);
         }
 
-        // 1回だけLINE通知を発動
+        // 1通だけLINE通知を呼ぶ
         await sendLineNotificationDirect();
 
         await fetchProposals();
@@ -594,7 +594,7 @@
       const selectedDate = document.getElementById('p-target-date').value;
       const subTitleEl = document.getElementById('sup-list-sub-title');
 
-      // 日付と完全連動した絞り込み表示
+      // 日付と完全に連動した履歴表示
       let published = proposals.filter(p => p.status !== 'draft');
       if (selectedDate) {
         published = published.filter(p => p.target_date === selectedDate);
