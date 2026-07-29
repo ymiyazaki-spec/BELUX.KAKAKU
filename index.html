@@ -122,18 +122,14 @@
           </div>
           <div>
             <label>納品/売り込み対象日</label>
-            <input type="date" id="p-target-date">
+            <input type="date" id="p-target-date" onchange="renderSup()">
           </div>
         </div>
 
         <button class="btn btn-sub" style="margin-top:8px;" onclick="addNoProposalDraft()">🚫 本日は提案なし（完了として登録）</button>
 
         <div style="background:#f8f9fa; padding:8px; border-radius:6px; border:1px solid #e0e0e0; margin-top:8px;">
-          <label>商品名（過去の入力履歴から選択可）</label>
-          <!-- 予測変換候補(datalist)を紐付け -->
-          <input type="text" id="p-name" placeholder="例: サンふじ" list="product-history-list" autocomplete="off">
-          <datalist id="product-history-list"></datalist>
-
+          <label>商品名</label><input type="text" id="p-name" placeholder="例: サンふじ">
           <div class="grid">
             <div><label>産地/規格</label><input type="text" id="p-spec" placeholder="例: 青森/28玉"></div>
             <div><label>提案単価(円)</label><input type="number" id="p-price" placeholder="例: 3500"></div>
@@ -153,7 +149,11 @@
       </div>
 
       <div class="card">
-        <div class="card-title">送信済み（公開済み）の提案履歴</div>
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>送信済みの提案履歴</span>
+          <button class="btn btn-s btn-sm" onclick="showAllDatesHistory()">全日付を表示</button>
+        </div>
+        <div id="sup-list-sub-title" style="font-size:11px; color:var(--s); margin-bottom:6px; font-weight:bold;"></div>
         <div id="sup-list">データ読み込み中...</div>
       </div>
     </div>
@@ -216,6 +216,7 @@
     let currentProfile = null;
     let proposals = [];
     let savingsBalance = 0;
+    let isShowAllHistory = false;
 
     async function init() {
       const today = new Date().toISOString().split('T')[0];
@@ -352,7 +353,6 @@
       const { data } = await _supabase.from('proposals').select('*').order('created_at', { ascending: false });
       if (data) proposals = data;
       renderSup(); renderBuy(); renderClk();
-      updateProductHistoryList(); // 過去商品候補の更新
     }
 
     async function fetchSavings() {
@@ -362,26 +362,6 @@
         document.getElementById('sav-val-buy').innerText = '￥' + savingsBalance.toLocaleString();
         document.getElementById('sav-val-clk').innerText = '￥' + savingsBalance.toLocaleString();
       }
-    }
-
-    // 過去に入力された商品名を抽出して予測変換リスト(datalist)を作る
-    function updateProductHistoryList() {
-      const datalist = document.getElementById('product-history-list');
-      if (!datalist) return;
-
-      const productNames = new Set();
-      proposals.forEach(p => {
-        if (p.product_name && p.product_name !== '（本日提案なし）') {
-          productNames.add(p.product_name);
-        }
-      });
-
-      datalist.innerHTML = '';
-      productNames.forEach(name => {
-        const option = document.createElement('option');
-        option.value = name;
-        datalist.appendChild(option);
-      });
     }
 
     async function addProposalDraft() {
@@ -459,6 +439,32 @@
     async function deleteDraft(id) {
       const { error } = await _supabase.from('proposals').delete().eq('id', id);
       if (!error) await fetchProposals();
+    }
+
+    // ★ 過去品目の呼び出し（コピー）機能 ★
+    function copyProposalToForm(id) {
+      const p = proposals.find(x => x.id === id);
+      if (!p) return;
+
+      document.getElementById('p-name').value = p.product_name || '';
+      document.getElementById('p-spec').value = p.spec || '';
+      document.getElementById('p-price').value = p.proposed_price || '';
+      document.getElementById('p-qty').value = p.limited_quantity || '';
+
+      // 今日の日付に戻す
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('p-target-date').value = today;
+
+      // 下書きリスト表示を更新
+      renderSup();
+
+      // 画面上部へスムーズスクロール
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showAllDatesHistory() {
+      isShowAllHistory = true;
+      renderSup();
     }
 
     async function sendLineNotificationDirect() {
@@ -595,8 +601,24 @@
       }
 
       const el = document.getElementById('sup-list');
-      const published = proposals.filter(p => p.status !== 'draft' && !p.is_archived);
-      if (!published.length) return el.innerHTML = '<div style="font-size:12px;color:#888;">送信済みの提案はありません</div>';
+      const selectedDate = document.getElementById('p-target-date').value;
+      const subTitleEl = document.getElementById('sup-list-sub-title');
+
+      // 選択した日付で履歴をフィルタリング
+      let published = proposals.filter(p => p.status !== 'draft' && !p.is_archived);
+      
+      if (!isShowAllHistory && selectedDate) {
+        published = published.filter(p => p.target_date === selectedDate);
+        subTitleEl.innerText = `📅 【${selectedDate}】 の提案履歴を表示中`;
+      } else {
+        subTitleEl.innerText = `📅 全日付の提案履歴を表示中`;
+      }
+
+      if (!published.length) {
+        return el.innerHTML = `<div style="font-size:12px;color:#888;padding:10px;text-align:center;">
+          ${selectedDate ? selectedDate + ' の提案履歴はありません' : '提案履歴はありません'}
+        </div>`;
+      }
 
       el.innerHTML = '';
       published.forEach(p => {
@@ -606,8 +628,15 @@
         
         el.innerHTML += `<div class="item-card">
           <div style="font-size:10px;color:var(--s);font-weight:bold;">${p.target_date || ''} | ${p.user_name}</div>
-          <div style="display:flex;justify-content:space-between;margin-top:2px;"><strong>${p.product_name}</strong>${b}</div>
-          <div style="font-size:11px;color:#666;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div>
+          <div style="display:flex;justify-content:space-between;margin-top:2px;">
+            <strong>${p.product_name}</strong>${b}
+          </div>
+          <div style="font-size:11px;color:#666;margin-bottom:6px;">${p.spec || ''} | ￥${p.proposed_price.toLocaleString()} (${p.limited_quantity || ''})</div>
+          
+          <!-- コピー呼び出しボタン -->
+          <div style="text-align:right;">
+            <button class="btn btn-s btn-sm" style="background:#8e44ad;" onclick="copyProposalToForm('${p.id}')">📋 この品目を入力欄にコピー</button>
+          </div>
         </div>`;
       });
     }
