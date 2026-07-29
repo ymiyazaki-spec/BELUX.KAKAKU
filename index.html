@@ -67,7 +67,7 @@
     @media print {
       body { background: #fff; padding: 0; color: #000; }
       h1, .user-bar, .tabs, .staff-status-box, .btn, .sav-box, #login-screen, .no-print { display: none !important; }
-      .card { shadow: none; border: none; padding: 0; margin: 0; }
+      .card { box-shadow: none; border: none; padding: 0; margin: 0; }
       .card-title { border-bottom: 2px solid #000; font-size: 16px; margin-bottom: 10px; }
       table { width: 100%; border-collapse: collapse; font-size: 12px; }
       th, td { border: 1px solid #000 !important; padding: 6px; text-align: left; color: #000 !important; }
@@ -199,6 +199,7 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
+    // ★ 正しいキー（...1glqeztoda...）に完全固定 ★
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
     const LINE_BOT_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
 
@@ -454,13 +455,10 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // LINE通知送信
+    // ★ 昨日の成功パターン：送信ボタン押下時だけに「1通だけ」LINE通知を送信する処理 ★
     async function sendLineNotificationDirect() {
       try {
-        const targetUrl = 'https://api.line.me/v2/bot/message/broadcast';
-        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
-        
-        await fetch(proxyUrl, {
+        await fetch('https://api.line.me/v2/bot/message/broadcast', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -495,6 +493,7 @@
           await _supabase.from('proposals').delete().in('id', noPropIds);
         }
 
+        // 1回だけLINE通知を発動
         await sendLineNotificationDirect();
 
         await fetchProposals();
@@ -595,7 +594,7 @@
       const selectedDate = document.getElementById('p-target-date').value;
       const subTitleEl = document.getElementById('sup-list-sub-title');
 
-      // ★ 日付と完全連動するフィルタリング ★
+      // 日付と完全連動した絞り込み表示
       let published = proposals.filter(p => p.status !== 'draft');
       if (selectedDate) {
         published = published.filter(p => p.target_date === selectedDate);
