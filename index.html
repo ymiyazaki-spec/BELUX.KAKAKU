@@ -200,6 +200,7 @@
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const LINE_BOT_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
 
     let _supabase = null;
     try {
@@ -453,6 +454,28 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    // ★ ボタンを押した時に「確実に1通だけ」LINEを飛ばす処理 ★
+    async function sendLineNotificationOnce() {
+      try {
+        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent('https://api.line.me/v2/bot/message/broadcast');
+        await fetch(proxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${LINE_BOT_TOKEN}`
+          },
+          body: JSON.stringify({
+            messages: [{
+              type: 'text',
+              text: '【価格提案システム】\n三澤商事より、本日分の提案がバイヤー画面に届きました！\n確認をお願いいたします。'
+            }]
+          })
+        });
+      } catch(e) {
+        console.error('LINE notification error:', e);
+      }
+    }
+
     async function publishNowManual() {
       const drafts = proposals.filter(p => p.status === 'draft');
       const validDrafts = drafts.filter(p => p.product_name !== '（本日提案なし）');
@@ -463,9 +486,7 @@
         if (validDrafts.length > 0) {
           const validIds = validDrafts.map(p => p.id);
           const { error } = await _supabase.from('proposals').update({ status: 'pending' }).in('id', validIds);
-          if (error) {
-            return alert('【送信エラー】\n' + error.message);
-          }
+          if (error) return alert('【送信エラー】\n' + error.message);
         }
         
         const noPropIds = drafts.filter(p => p.product_name === '（本日提案なし）').map(p => p.id);
@@ -473,8 +494,11 @@
           await _supabase.from('proposals').delete().in('id', noPropIds);
         }
 
+        // 送信ボタンが押されたので、ここで「1回だけ」LINE通知を飛ばします
+        await sendLineNotificationOnce();
+
         await fetchProposals();
-        alert('バイヤーへ送信完了しました！');
+        alert('バイヤーへ送信完了しました！（LINE通知も送信されました）');
       }
     }
 
@@ -571,7 +595,7 @@
       const selectedDate = document.getElementById('p-target-date').value;
       const subTitleEl = document.getElementById('sup-list-sub-title');
 
-      // 日付と完全に連動した履歴表示
+      // 日付連動履歴表示
       let published = proposals.filter(p => p.status !== 'draft');
       if (selectedDate) {
         published = published.filter(p => p.target_date === selectedDate);
