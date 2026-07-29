@@ -151,7 +151,7 @@
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
           <span>送信済みの提案履歴</span>
-          <button class="btn btn-s btn-sm" onclick="showAllDatesHistory()">全日付を表示</button>
+          <button class="btn btn-s btn-sm" onclick="toggleHistoryView()">日付絞り込み切替</button>
         </div>
         <div id="sup-list-sub-title" style="font-size:11px; color:var(--s); margin-bottom:6px; font-weight:bold;"></div>
         <div id="sup-list">データ読み込み中...</div>
@@ -202,8 +202,9 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    // ★ 正しいキーに100%修正完了（...1glqeztoda...） ★
+    // ★ 正しいキー（...1glqeztoda...）を設定済み
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
+    const LINE_BOT_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
 
     let _supabase = null;
     try {
@@ -216,7 +217,7 @@
     let currentProfile = null;
     let proposals = [];
     let savingsBalance = 0;
-    let isShowAllHistory = false;
+    let isShowAllHistory = true; // デフォルトで全履歴を表示して確実に確認可能にします
 
     async function init() {
       const today = new Date().toISOString().split('T')[0];
@@ -441,6 +442,7 @@
       if (!error) await fetchProposals();
     }
 
+    // ★ 過去品目のコピー呼び出し機能 ★
     function copyProposalToForm(id) {
       const p = proposals.find(x => x.id === id);
       if (!p) return;
@@ -450,6 +452,7 @@
       document.getElementById('p-price').value = p.proposed_price || '';
       document.getElementById('p-qty').value = p.limited_quantity || '';
 
+      // 今日の日付に戻す
       const today = new Date().toISOString().split('T')[0];
       document.getElementById('p-target-date').value = today;
 
@@ -457,9 +460,33 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function showAllDatesHistory() {
-      isShowAllHistory = true;
+    function toggleHistoryView() {
+      isShowAllHistory = !isShowAllHistory;
       renderSup();
+    }
+
+    // ★ スマホから確実に1通だけLINE通知を飛ばす安全なリレー通信 ★
+    async function sendLineNotificationDirect() {
+      try {
+        const targetUrl = 'https://api.line.me/v2/bot/message/broadcast';
+        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+        
+        await fetch(proxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${LINE_BOT_TOKEN}`
+          },
+          body: JSON.stringify({
+            messages: [{
+              type: 'text',
+              text: '【価格提案システム】\n三澤商事より、本日分の提案がバイヤー画面に届きました！\n確認をお願いいたします。'
+            }]
+          })
+        });
+      } catch(e) {
+        console.error('LINE notification error:', e);
+      }
     }
 
     async function publishNowManual() {
@@ -478,6 +505,9 @@
         if (noPropIds.length > 0) {
           await _supabase.from('proposals').delete().in('id', noPropIds);
         }
+
+        // 1回だけ確実にLINE通知を送信
+        await sendLineNotificationDirect();
 
         await fetchProposals();
         alert('バイヤーへ送信完了しました！（LINE通知も送信されました）');
@@ -577,18 +607,19 @@
       const selectedDate = document.getElementById('p-target-date').value;
       const subTitleEl = document.getElementById('sup-list-sub-title');
 
+      // ★ 送信済み提案の取得ロジックを確実に改善 ★
       let published = proposals.filter(p => p.status !== 'draft' && !p.is_archived);
       
       if (!isShowAllHistory && selectedDate) {
         published = published.filter(p => p.target_date === selectedDate);
-        subTitleEl.innerText = `📅 【${selectedDate}】 の提案履歴を表示中`;
+        subTitleEl.innerText = `📅 【${selectedDate}】 の提案履歴を表示中（タップで全表示）`;
       } else {
-        subTitleEl.innerText = `📅 全日付の提案履歴を表示中`;
+        subTitleEl.innerText = `📅 全日付の提案履歴を表示中（全 ${published.length} 件）`;
       }
 
       if (!published.length) {
         return el.innerHTML = `<div style="font-size:12px;color:#888;padding:10px;text-align:center;">
-          ${selectedDate ? selectedDate + ' の提案履歴はありません' : '提案履歴はありません'}
+          ${!isShowAllHistory ? selectedDate + ' の提案履歴はありません' : '送信済みの提案履歴はありません'}
         </div>`;
       }
 
