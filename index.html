@@ -199,9 +199,7 @@
 
   <script>
     const SUPABASE_URL = 'https://jnpgbngjtcilgqeztoda.supabase.co';
-    // 正しいANON KEYに固定
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpucGdibmdqdGNpbGdxZXp0b2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxOTMwMDksImV4cCI6MjEwMDc2OTAwOX0.YPAt7O-Lmzgure0ga-ARcmY3Ur0yy57kg9oEzs1WuHE';
-    const LINE_BOT_TOKEN = 's4BMz62eI5MTIXfiGNQx/XLzZqVI4x2LUR9L1R4ElLVtMuDQ6CObjwgmqbRtJ7enrfjdWtLrvti+y68fXG0JYSIG1LFiY6mlP+ga++Wiln/hxDxg1rB8LB+yShCzSIylAkCuwcT47eBa6f9OcP/6yQdB04t89/1O/w1cDnyilFU=';
 
     let _supabase = null;
     try {
@@ -455,27 +453,6 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // ★ 昨日の成功コード：送信時のみ1回だけLINE通知を発動する処理 ★
-    async function sendLineNotificationDirect() {
-      try {
-        await fetch('https://api.line.me/v2/bot/message/broadcast', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${LINE_BOT_TOKEN}`
-          },
-          body: JSON.stringify({
-            messages: [{
-              type: 'text',
-              text: '【価格提案システム】\n三澤商事より、本日分の提案がバイヤー画面に届きました！\n確認をお願いいたします。'
-            }]
-          })
-        });
-      } catch(e) {
-        console.error('LINE notification error:', e);
-      }
-    }
-
     async function publishNowManual() {
       const drafts = proposals.filter(p => p.status === 'draft');
       const validDrafts = drafts.filter(p => p.product_name !== '（本日提案なし）');
@@ -485,6 +462,7 @@
       if (confirm(`下書きにある提案を送信しますか？`)) {
         if (validDrafts.length > 0) {
           const validIds = validDrafts.map(p => p.id);
+          // Supabaseのデータベーストリガー（Step 1で設定）が自動で1通だけLINEを送信します
           await _supabase.from('proposals').update({ status: 'pending' }).in('id', validIds);
         }
         
@@ -492,9 +470,6 @@
         if (noPropIds.length > 0) {
           await _supabase.from('proposals').delete().in('id', noPropIds);
         }
-
-        // 1通だけLINE通知を呼ぶ
-        await sendLineNotificationDirect();
 
         await fetchProposals();
         alert('バイヤーへ送信完了しました！（LINE通知も送信されました）');
